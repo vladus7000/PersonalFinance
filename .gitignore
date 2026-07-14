@@ -44,6 +44,7 @@ migrate_working_dir/
 
 # Generated localizations (flutter gen-l10n, see l10n.yaml)
 /lib/core/l10n/gen/
+/lib/core/l10n/untranslated.json
 
 # Symbolication related
 app.*.symbols
