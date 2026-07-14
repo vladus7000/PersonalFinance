@@ -26,6 +26,7 @@ E0 (каркас проекта) завершён — начинать с **E1**
 - [x] **E1** — Result/Failure, Money/Quantity/Percentage, Drift-БД, Clock, курсы валют + CurrencyConverter, net_worth_snapshots, авто-бэкап
 - [ ] **E2** — Профиль + онбординг (движок шагов)
 - [ ] E3–E13 — см. [BUILD_PLAN.md](BUILD_PLAN.md)
+- [ ] **E14** — Готовность к дистрибуции (crash reporting, feedback, Privacy Policy, TestFlight) — идёт параллельно, не по номеру; см. doc.md §11
 
 ## Требования
 

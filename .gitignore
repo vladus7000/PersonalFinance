@@ -46,6 +46,13 @@ migrate_working_dir/
 /lib/core/l10n/gen/
 /lib/core/l10n/untranslated.json
 
+# Secrets (preventive — no backend/.env exists yet, see BUILD_PLAN.md E14.T6
+# and doc.md §11.6; added now so the pattern is already in place when one does)
+*.env
+*.env.local
+.env*
+!.env.example
+
 # Symbolication related
 app.*.symbols
 
