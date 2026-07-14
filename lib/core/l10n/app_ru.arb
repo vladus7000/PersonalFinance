@@ -1,0 +1,16 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Personal Finance Assistant",
+  "navOverview": "Обзор",
+  "navPlan": "План",
+  "navAccounts": "Счета",
+  "navDecisions": "Решения",
+  "navMore": "Ещё",
+  "moreInvestments": "Инвестиции",
+  "moreDocuments": "Документы",
+  "moreGoals": "Цели",
+  "moreAnalytics": "Аналитика",
+  "morePlanner": "Планировщик",
+  "moreSettings": "Настройки",
+  "screenPlaceholder": "Экран ещё не реализован"
+}

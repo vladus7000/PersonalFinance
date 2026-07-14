@@ -1,0 +1,27 @@
+Copyright (c) 2026 Vladyslav Reviakin. All rights reserved.
+
+This repository and its contents (including but not limited to source code,
+documentation, design assets, and specifications) are the proprietary
+property of the copyright holder.
+
+No permission is granted to any person to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of this software or any portion
+of it, for any purpose, without the prior written consent of the copyright
+holder.
+
+Viewing this repository (e.g. because it is hosted on a public git service)
+does not grant any of the above rights.
+
+To request permission for any use, contact: svladus7000@gmail.com
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
+SOFTWARE.
+
+---
+
+Third-party dependencies used by this project remain licensed under their
+own respective licenses (see `pubspec.yaml` / `pubspec.lock`); this license
+does not alter or restrict rights granted by those licenses.

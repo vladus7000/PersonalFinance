@@ -1,0 +1,37 @@
+{
+  "@@locale": "en",
+  "appTitle": "Personal Finance Assistant",
+  "@appTitle": {
+    "description": "The application name shown in title bars and the app switcher"
+  },
+  "navOverview": "Overview",
+  "@navOverview": {
+    "description": "Bottom navigation tab: dashboard / overview"
+  },
+  "navPlan": "Plan",
+  "@navPlan": {
+    "description": "Bottom navigation tab: income plan and financial cycle"
+  },
+  "navAccounts": "Accounts",
+  "@navAccounts": {
+    "description": "Bottom navigation tab: accounts and storages"
+  },
+  "navDecisions": "Decisions",
+  "@navDecisions": {
+    "description": "Bottom navigation tab: financial decisions"
+  },
+  "navMore": "More",
+  "@navMore": {
+    "description": "Bottom navigation tab: secondary sections (investments, documents, goals, analytics, planner, settings)"
+  },
+  "moreInvestments": "Investments",
+  "moreDocuments": "Documents",
+  "moreGoals": "Goals",
+  "moreAnalytics": "Analytics",
+  "morePlanner": "Planner",
+  "moreSettings": "Settings",
+  "screenPlaceholder": "This screen is not built yet",
+  "@screenPlaceholder": {
+    "description": "Shown on stub screens that have not been implemented by the corresponding epic yet"
+  }
+}
