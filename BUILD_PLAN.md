@@ -49,11 +49,14 @@
 
 Flutter 3.44.x (stable, установлен), Dart 3.12.x. Пакеты (версии закреплены в E0.T2, фактически
 установленные — см. `pubspec.yaml`):
-`flutter_riverpod` + `riverpod_annotation` (codegen), `go_router`, `drift` + `sqlite3` (НЕ
+`flutter_riverpod` + `riverpod_annotation` + `riverpod` (codegen; `riverpod` добавлен явно —
+`Override`, нужный для `test/support/pump_app.dart`, живёт в `package:riverpod/misc.dart`, а не
+реэкспортируется из `flutter_riverpod.dart`), `go_router`, `drift` + `sqlite3` (НЕ
 `sqlite3_flutter_libs` — этот пакет официально EOL, `sqlite3` 3.x бандлит нативные библиотеки сам
 через Dart native assets), `decimal`, `freezed_annotation` + `json_annotation`, `path_provider`,
-`path`, `intl`, `flutter_localizations`; dev: `build_runner`, `riverpod_generator`, `freezed`,
-`json_serializable`, `drift_dev`, `mocktail`.
+`path`, `intl`, `flutter_localizations`, `meta`; dev: `build_runner`, `riverpod_generator`, `freezed`,
+`json_serializable`, `drift_dev`, `mocktail`, `integration_test` (SDK, добавлен в E1.T3 — нужен для
+проверки file-backed `AppDatabase` на реальном симуляторе, не только in-memory в unit-тестах).
 Пакеты, добавляемые позже в своих эпиках (НЕ ставить раньше): `fl_chart` (E9), `file_picker` +
 `open_filex`/просмотр PDF (E8), `flutter_local_notifications` (E10), `flutter_secure_storage` +
 `local_auth` (E10).
@@ -96,6 +99,30 @@ Flutter 3.44.x (stable, установлен), Dart 3.12.x. Пакеты (вер
 
 `flutter analyze` без ошибок; кодогенерация проходит; новые/затронутые тесты зелёные;
 `flutter build ios --debug --simulator --no-codesign` успешна; в задаче выполнен её частный DoD.
+
+## 0.6. Тестовая архитектура
+
+Зафиксировано после E1, чтобы объём тестов не расползался по стилю с ростом числа экранов и
+модулей (E2–E13). Полная версия с обоснованием — в [ARCHITECTURE.md](ARCHITECTURE.md); здесь —
+таблица-памятка и обязательные правила.
+
+**Пирамида по слоям** — бизнес-логику проверяем один раз, на самом низком возможном слое;
+виджет-тесты не пересчитывают бизнес-правила, только проверяют рендер состояний.
+
+| Слой | Чем тестируем | Пример |
+|---|---|---|
+| `domain/engines/*` | Только фейки на интерфейсах, без БД | `test/domain/engines/currency_converter_test.dart` |
+| `data/*` (repositories/sources/daos) | In-memory Drift (`NativeDatabase.memory()`), никогда файл/path_provider | `test/data/sources/manual_exchange_rate_source_test.dart` |
+| `features/*/application/*` (Riverpod-контроллеры) | `ProviderContainer` + override репозиториев на фейки, без pump виджета | — (появится в E2) |
+| `features/*/presentation/*` (экраны) | Widget-тесты через `test/support/pump_app.dart` | — (появится в E2) |
+| `integration_test/` | Только то, что нельзя замокать (path_provider, биометрия, файлы) + сквозные user flow (E13.T3) | `integration_test/app_database_test.dart` |
+
+**Обязательные правила:**
+
+1. `test/` зеркалит путь в `lib/` 1:1 (например, `lib/domain/engines/x.dart` → `test/domain/engines/x_test.dart`). Файлы верхнего уровня `lib/` (`main.dart`) → `test/main_test.dart`.
+2. **Фейки вместо моков** для простых интерфейсов — пиши руками (как `_FakeExchangeRateSource`), это нагляднее. `mocktail` — только для интерфейсов с большим числом методов, где ручной фейк громоздкий.
+3. Общие тестовые обёртки/хелперы — в `test/support/`, не копировать boilerplate по файлам (`pump_app.dart` уже есть).
+4. `integration_test/` не разрастается на рутинные экранные проверки — только платформенные зависимости и сквозные флоу.
 
 ---
 
@@ -184,36 +211,38 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
 **Цель:** value objects денег, Drift-БД с миграциями и авто-бэкапом, таблицы курсов/снапшотов,
 интерфейсы источников, каркасы движков. UI здесь нет.
 
-### E1.T1 — Value object `Money` и `Quantity`
-- **Контекст:** §0.1 п.1. `decimal` пакет.
-- **Действия:** `core/money/money.dart` — `Money{ Decimal amount; CurrencyCode currency }` c операциями
-  (add/subtract только в одной валюте — иначе `Failure`), `Quantity` (Decimal, произвольная точность),
-  `Percentage`, политика округления (round half-up, только на отображении). Парсинг/сериализация в/из
-  canonical string.
-- **DoD:** unit-тесты: арифметика, запрет смешения валют, round-trip string↔Money без потерь,
-  крипто-точность (8+ знаков).
-- **Зависимости:** E0.T2
-
-### E1.T2 — `Result`/`Failure`
+### E1.T1 — `Result`/`Failure`
 - **Действия:** `core/result/` — sealed `Failure` (freezed) с вариантами (`validation`, `notFound`,
   `conflict`, `storage`, `currencyMismatch`, …) и `Result<T>` (или использовать `dartz`-подобный свой
   тип; сторонний пакет — только с согласия).
 - **DoD:** типы компилируются, покрыты минимальным тестом; используются далее вместо `throw`.
 - **Зависимости:** E0.T2
 
+### E1.T2 — Value object `Money` и `Quantity`
+- **Контекст:** §0.1 п.1. `decimal` пакет. Порядок сознательно переставлен относительно исходного
+  плана: `Money.add/subtract` возвращает `Failure` (`currencyMismatch`) при смешении валют, а значит
+  `Result`/`Failure` (E1.T1) должен существовать раньше.
+- **Действия:** `core/money/money.dart` — `Money{ Decimal amount; CurrencyCode currency }` c операциями
+  (add/subtract только в одной валюте — иначе `Failure`), `Quantity` (Decimal, произвольная точность),
+  `Percentage`, политика округления (round half-up, только на отображении). Парсинг/сериализация в/из
+  canonical string.
+- **DoD:** unit-тесты: арифметика, запрет смешения валют, round-trip string↔Money без потерь,
+  крипто-точность (8+ знаков).
+- **Зависимости:** E1.T1
+
 ### E1.T3 — Drift-БД, версия схемы, подключение
 - **Действия:** `data/db/app_database.dart` — `@DriftDatabase`, `schemaVersion = 1`, открытие через
   `path_provider` в app-support каталоге. In-memory конструктор для тестов (`NativeDatabase.memory`).
 - **DoD:** БД открывается на симуляторе; тест открывает in-memory БД.
-- **Зависимости:** E1.T1
+- **Зависимости:** E1.T2
 
-### E1.T4 — Авто-бэкап и стратегия миграций
-- **Контекст:** данные локальные, сервера нет — потеря = катастрофа (анализ §1.3).
-- **Действия:** перед применением миграции копировать файл БД в `backups/` с датой (дату брать из
-  инъектируемого `Clock`, т.к. прямой `DateTime.now()` в некоторых окружениях запрещён — использовать
-  `core/time/clock.dart`); `MigrationStrategy` с логированием версий.
-- **DoD:** тест: миграция с v1→v1 (no-op) создаёт бэкап-копию; повреждать данные миграция не может.
-- **Зависимости:** E1.T3
+### E1.T4 — `Clock` и tz-aware время
+- **Контекст:** порядок сознательно переставлен относительно исходного плана: авто-бэкап (ниже,
+  теперь E1.T7) берёт дату из `Clock`, значит `Clock` должен существовать раньше.
+- **Действия:** `core/time/clock.dart` — инъектируемый `Clock` (в проде — системное время, в тестах —
+  фиксированное); helper для «сегодня» с учётом `timezone` профиля (пока UTC-заглушка до E2).
+- **DoD:** движки и БД берут время только через `Clock`; тесты используют фиксированный Clock.
+- **Зависимости:** E0.T2
 
 ### E1.T5 — Таблицы курсов и конвертация
 - **Действия:** таблица `exchange_rates(from, to, rate TEXT, effective_date, source='manual', is_final)`;
@@ -221,7 +250,7 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
   (домен) с политикой fallback (§5.9: если курса нет — вернуть результат с флагом `stale`/`missing`,
   не выдавать приблизительное за точное).
 - **DoD:** unit-тесты конвертации: прямой курс, обратный, отсутствующий курс → помеченный результат.
-- **Зависимости:** E1.T1, E1.T3
+- **Зависимости:** E1.T2, E1.T3
 
 ### E1.T6 — Таблица `net_worth_snapshots`
 - **Действия:** `net_worth_snapshots(date, total_primary TEXT, breakdown JSON, source)`; DAO для записи/чтения
@@ -229,11 +258,13 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
 - **DoD:** DAO пишет и читает снапшоты за период; тест на сериализацию breakdown.
 - **Зависимости:** E1.T3
 
-### E1.T7 — `Clock` и tz-aware время
-- **Действия:** `core/time/clock.dart` — инъектируемый `Clock` (в проде — системное время, в тестах —
-  фиксированное); helper для «сегодня» с учётом `timezone` профиля (пока UTC-заглушка до E2).
-- **DoD:** движки и БД берут время только через `Clock`; тесты используют фиксированный Clock.
-- **Зависимости:** E0.T2
+### E1.T7 — Авто-бэкап и стратегия миграций
+- **Контекст:** данные локальные, сервера нет — потеря = катастрофа (анализ §1.3).
+- **Действия:** перед применением миграции копировать файл БД в `backups/` с датой (дату брать из
+  инъектируемого `Clock`, т.к. прямой `DateTime.now()` в некоторых окружениях запрещён — использовать
+  `core/time/clock.dart`); `MigrationStrategy` с логированием версий.
+- **DoD:** тест: миграция с v1→v1 (no-op) создаёт бэкап-копию; повреждать данные миграция не может.
+- **Зависимости:** E1.T3, E1.T4
 
 ---
 
@@ -295,7 +326,7 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
   (%/фикс); контракт USD/EUR → выплата UAH по заданному курсу; удержания; перенос с выходного.
 - **DoD:** таблица unit-тестов покрывает КАЖДЫЙ сценарий §2.3 (мин. по одному кейсу), включая неполный
   месяц и перенос даты; расчёт детерминирован при фиксированном Clock.
-- **Зависимости:** E3.T1, E1.T5, E1.T7
+- **Зависимости:** E3.T1, E1.T5, E1.T4
 
 ### E3.T3 — Онбординг шаги 2–3 (доход) + провайдеры
 - **Действия:** добавить в движок онбординга шаги «Доход» и «Правило расчёта» (§3.3); Application-провайдеры
@@ -324,7 +355,7 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
   с 29–31 числами). Один активный цикл (§5.5).
 - **DoD:** тесты: генерация периода для разных `startDay`; запрет недопустимых переходов статуса;
   создание текущего цикла при завершении онбординга.
-- **Зависимости:** E1.T7, E2.T4
+- **Зависимости:** E1.T4, E2.T4
 
 ### E4.T2 — Таблица `IncomeEvent` + привязка к циклу
 - **Контекст:** §4.7. Правило принадлежности: по `expectedDate` (анализ П6), с возможностью ручного переноса.
