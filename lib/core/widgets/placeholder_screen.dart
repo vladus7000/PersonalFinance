@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/pfa_text_styles.dart';
-import '../../core/l10n/gen/app_localizations.dart';
+import '../l10n/gen/app_localizations.dart';
+import '../../app/theme/pfa_text_styles.dart';
 
 /// Generic stub used by feature screens that have not been built yet by
 /// their corresponding BUILD_PLAN epic. Replace with the real screen when

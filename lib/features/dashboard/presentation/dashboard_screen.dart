@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/router/placeholder_screen.dart';
+import '../../../core/widgets/placeholder_screen.dart';
 import '../../../core/l10n/gen/app_localizations.dart';
 
 /// §3.4 doc.md — built out in E11.T2.

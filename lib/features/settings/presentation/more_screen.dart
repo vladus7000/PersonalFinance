@@ -5,7 +5,7 @@ import '../../../core/l10n/gen/app_localizations.dart';
 /// §3.1 doc.md — "Ещё" tab. Lists secondary sections that live outside the
 /// 4 main tabs; each item becomes a real route as its owning epic lands
 /// (Investments: E8, Documents: E10, Goals: E7, Analytics: E11, Planner: E12,
-/// Settings: not yet scheduled as its own epic — settled alongside E12/E13).
+/// Settings: E13.T2).
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
