@@ -12,11 +12,11 @@ void main() {
 
 /// Root widget. Localization, theming, routing and DI (via the enclosing
 /// [ProviderScope] in [main]) are wired in.
-class PfaApp extends StatelessWidget {
+class PfaApp extends ConsumerWidget {
   const PfaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       localizationsDelegates: const [
@@ -29,7 +29,7 @@ class PfaApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
-      routerConfig: appRouter,
+      routerConfig: ref.watch(appRouterProvider),
     );
   }
 }

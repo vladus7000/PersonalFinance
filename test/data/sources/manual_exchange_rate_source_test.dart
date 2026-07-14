@@ -44,6 +44,11 @@ void main() {
     expect(result?.rate, Decimal.parse('41.70'));
     expect(result?.source, 'manual');
     expect(result?.isFinal, isTrue);
+    // Drift drops DateTime.isUtc on the way through storage (BUILD_PLAN.md
+    // §0.4) — assert full equality, not just the wall-clock numbers, so a
+    // regression here fails loudly instead of silently.
+    expect(result?.effectiveDate, date);
+    expect(result?.effectiveDate.isUtc, isTrue);
   });
 
   test('latestRate picks the most recent rate on or before asOf, not after', () async {

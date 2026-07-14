@@ -33,5 +33,51 @@
   "screenPlaceholder": "This screen is not built yet",
   "@screenPlaceholder": {
     "description": "Shown on stub screens that have not been implemented by the corresponding epic yet"
+  },
+  "onboardingSkip": "Skip",
+  "@onboardingSkip": {
+    "description": "Button that advances past an optional onboarding step without filling it in"
+  },
+  "onboardingNext": "Next",
+  "@onboardingNext": {
+    "description": "Button that advances to the next onboarding step"
+  },
+  "onboardingFinish": "Finish",
+  "@onboardingFinish": {
+    "description": "Button on the last onboarding step that completes onboarding"
+  },
+  "onboardingCurrencyTitle": "Your main currency",
+  "onboardingPrimaryCurrencyLabel": "Primary currency",
+  "onboardingAdditionalCurrenciesLabel": "Additional currencies (optional)",
+  "onboardingLifeExpensesTitle": "Monthly living expenses",
+  "@onboardingLifeExpensesTitle": {
+    "description": "Onboarding step 4 title — an aggregate estimate, not per-transaction tracking (doc.md §2.8)"
+  },
+  "onboardingLifeModeFixed": "Fixed amount",
+  "onboardingLifeModePercent": "% of income",
+  "onboardingLifeModeRange": "Range",
+  "onboardingLifeFixedAmountLabel": "Amount per month",
+  "onboardingLifePercentLabel": "Percent of income",
+  "onboardingLifeRangeMinLabel": "Usually at least",
+  "onboardingLifeRangeMaxLabel": "Usually at most",
+  "welcomeStart": "Get started",
+  "@welcomeStart": {
+    "description": "First-launch screen: button that starts onboarding"
+  },
+  "welcomeMessage": "No need to log every purchase. PFA manages your income, capital and plan — with documents and decisions kept in one place, and your data always under your control.",
+  "@welcomeMessage": {
+    "description": "First-launch screen: short description of the product philosophy (doc.md §3.2)"
+  },
+  "onboardingSummaryTitle": "You're all set",
+  "@onboardingSummaryTitle": {
+    "description": "Onboarding completion screen title"
+  },
+  "onboardingSummaryPrimaryCurrency": "Primary currency",
+  "@onboardingSummaryPrimaryCurrency": {
+    "description": "Onboarding completion screen: label for the chosen primary currency"
+  },
+  "onboardingSummaryOpenDashboard": "Open Dashboard",
+  "@onboardingSummaryOpenDashboard": {
+    "description": "Onboarding completion screen: button that saves the profile and opens Dashboard"
   }
 }

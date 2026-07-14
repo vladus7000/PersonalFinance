@@ -38,7 +38,9 @@ class ManualExchangeRateSource implements ExchangeRateSource {
       from: CurrencyCode(row.fromCurrency),
       to: CurrencyCode(row.toCurrency),
       rate: Decimal.parse(row.rate),
-      effectiveDate: row.effectiveDate,
+      // Drift does not preserve DateTime.isUtc through storage — see
+      // BUILD_PLAN.md §0.4. Must normalize on every read.
+      effectiveDate: row.effectiveDate.toUtc(),
       source: row.source,
       isFinal: row.isFinal,
     );
@@ -56,7 +58,7 @@ class ManualExchangeRateSource implements ExchangeRateSource {
             fromCurrency: rate.from.value,
             toCurrency: rate.to.value,
             rate: rate.rate.toString(),
-            effectiveDate: rate.effectiveDate,
+            effectiveDate: rate.effectiveDate.toUtc(),
             source: Value(rate.source),
             isFinal: Value(rate.isFinal),
           ),

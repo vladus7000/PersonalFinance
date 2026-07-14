@@ -40,6 +40,10 @@ void main() {
     expect(results.single.totalPrimary, Decimal.parse('56340.00'));
     expect(results.single.breakdown, snapshot.breakdown);
     expect(results.single.source, 'manual');
+    // Drift drops DateTime.isUtc on the way through storage (BUILD_PLAN.md
+    // §0.4) — assert full equality, not just the wall-clock numbers.
+    expect(results.single.date, snapshot.date);
+    expect(results.single.date.isUtc, isTrue);
   });
 
   test('range excludes snapshots outside the requested window', () async {

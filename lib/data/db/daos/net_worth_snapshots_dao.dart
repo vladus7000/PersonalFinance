@@ -16,7 +16,7 @@ class NetWorthSnapshotsDao {
         .into(_db.netWorthSnapshots)
         .insert(
           NetWorthSnapshotsCompanion.insert(
-            date: snapshot.date,
+            date: snapshot.date.toUtc(),
             totalPrimary: snapshot.totalPrimary.toString(),
             breakdown: _encodeBreakdown(snapshot.breakdown),
             source: snapshot.source,
@@ -35,7 +35,9 @@ class NetWorthSnapshotsDao {
   }
 
   NetWorthSnapshot _toDomain(NetWorthSnapshotRow row) => NetWorthSnapshot(
-    date: row.date,
+    // Drift does not preserve DateTime.isUtc through storage — see
+    // BUILD_PLAN.md §0.4. Must normalize on every read.
+    date: row.date.toUtc(),
     totalPrimary: Decimal.parse(row.totalPrimary),
     breakdown: _decodeBreakdown(row.breakdown),
     source: row.source,

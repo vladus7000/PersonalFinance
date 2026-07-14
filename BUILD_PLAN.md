@@ -97,6 +97,22 @@ Flutter 3.44.x (stable, установлен), Dart 3.12.x. Пакеты (вер
 - **Секреты будущего бэкенда** (E14.T6, doc.md §11.6) — только через `--dart-define` или локальный
   `.env`, который никогда не коммитится (превентивно уже в `.gitignore`, хотя реального `.env` и
   бэкенда пока нет). Ни при каких обстоятельствах не хардкодить ключ/токен в исходниках «временно».
+- **Drift не сохраняет `DateTime.isUtc`.** Момент времени (миллисекунды) через БД проходит верно,
+  но при чтении Drift возвращает DateTime с `isUtc == false` (локальная зона), даже если
+  записывали `DateTime.utc(...)`. `DateTime.==` в Dart сравнивает не только момент, а и
+  `isUtc` — два DateTime с одинаковыми миллисекундами, но разным `isUtc`, **не равны**
+  (проверено эмпирически: `DateTime.utc(...) == DateTime.fromMillisecondsSinceEpoch(sameMs)` →
+  `false`). Каждый маппинг из Drift-row в доменную сущность обязан вызывать `.toUtc()` на каждом
+  поле `DateTime` (обнаружено в E2.T1 — `DriftUserProfileRepository`, задним числом исправлено и в
+  `ManualExchangeRateSource`/`NetWorthSnapshotsDao` из E1, тесты которых этого не ловили, т.к. не
+  сравнивали дату через полное равенство сущности).
+- **Riverpod запрещает менять состояние провайдера синхронно в `build`/`initState`/`dispose`/
+  `didUpdateWidget`.** Если экрану нужно закоммитить дефолтное значение в контроллер при первом
+  показе (например, дефолтная валюта в `CurrencyStepScreen`, E2.T3) — вызов обязан быть отложен:
+  `Future(() => notifier.method())` внутри `initState`. Иначе падает с «Tried to modify a provider
+  while the widget tree was building». В widget-тестах после этого нужен `await tester.pumpAndSettle()`
+  (не единичный `pump()`) сразу после `pumpApp(...)`, иначе тест тапает по ещё не обновившейся
+  (`onPressed: null`) кнопке и молча ничего не делает.
 
 ## 0.5. Definition of Done (общий, применяется к КАЖДОЙ задаче)
 
