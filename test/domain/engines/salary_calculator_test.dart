@@ -461,4 +461,78 @@ void main() {
 
     expect(forecast.isRateStale, isTrue);
   });
+
+  test(
+    'real payroll rule: advance on the 22nd (same month), main on the 7th (next month), '
+    'one rate fixed on the 1st, weekend payments shift to the previous business day',
+    () async {
+      // Accountant's rule, verbatim: "аванс будет 22 числа, а вторая часть
+      // ЗП 07 числа. Например за июнь аванс с 01-15 число - выплата
+      // 22.06.2026, а вторая часть с 16-30 число - выплата 07.07.26."
+      // February 2026 is used here (not June) because both the 22nd and the
+      // following month's 7th land on a weekend that month — Feb 22, 2026
+      // is a Sunday and Mar 7, 2026 is a Saturday — so this same scenario
+      // also exercises the "payment on a weekend moves to the previous
+      // business day" rule in the same test.
+      rateSource.rates.add(
+        ExchangeRate(
+          from: usd,
+          to: uah,
+          rate: Decimal.parse('41.50'),
+          effectiveDate: DateTime.utc(2026, 2, 1),
+          source: 'manual',
+          isFinal: true,
+        ),
+      );
+      final advance = percentRule(
+        partIndex: 0,
+        paymentDay: 22,
+        percentage: Decimal.fromInt(50),
+        weekendShiftRule: WeekendShiftRule.moveToPreviousBusinessDay,
+        rateFixingDay: 1,
+      );
+      final main = percentRule(
+        partIndex: 1,
+        paymentDay: 7,
+        paymentMonthOffset: 1,
+        percentage: Decimal.fromInt(50),
+        weekendShiftRule: WeekendShiftRule.moveToPreviousBusinessDay,
+        rateFixingDay: 1,
+      );
+      final source = buildSource(
+        calculationMode: IncomeCalculationMode.fixed,
+        scheduleRules: [advance, main],
+        payoutCurrency: uah,
+      );
+
+      final advanceForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: advance,
+          year: 2026,
+          month: 2, // the period being forecast is February
+          countryCode: 'UA',
+        ),
+      ).forecast;
+      final mainForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: main,
+          year: 2026,
+          month: 2,
+          countryCode: 'UA',
+        ),
+      ).forecast;
+
+      // Feb 22, 2026 (Sunday) -> Fri Feb 20. Mar 7, 2026 (Saturday) -> Fri Mar 6.
+      expect(advanceForecast.expectedDate, DateTime.utc(2026, 2, 20));
+      expect(mainForecast.expectedDate, DateTime.utc(2026, 3, 6));
+      // Both installments of the same period use the one rate fixed on
+      // Feb 1st, regardless of which calendar month they're actually paid in.
+      expect(advanceForecast.rate, Decimal.parse('41.50'));
+      expect(mainForecast.rate, Decimal.parse('41.50'));
+      expect(advanceForecast.rateSource, 'manual');
+      expect(mainForecast.rateSource, 'manual');
+    },
+  );
 }
