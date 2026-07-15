@@ -16,6 +16,11 @@ class IncomeScheduleRules extends Table {
 
   IntColumn get paymentDay => integer().named('payment_day')();
 
+  /// See [IncomeScheduleRule.paymentMonthOffset] — the payment can land in
+  /// the month after the forecasted period.
+  IntColumn get paymentMonthOffset =>
+      integer().named('payment_month_offset').withDefault(const Constant(0))();
+
   /// `'percentage' | 'fixed'` — [PaymentPartAmount] discriminator.
   TextColumn get amountType => text().named('amount_type')();
 
@@ -26,7 +31,9 @@ class IncomeScheduleRules extends Table {
   /// [WeekendShiftRule] enum name.
   TextColumn get weekendShiftRule => text().named('weekend_shift_rule')();
 
-  IntColumn get rateFixingOffsetDays => integer().named('rate_fixing_offset_days').nullable()();
+  /// See [IncomeScheduleRule.rateFixingDay] — anchored to the forecasted
+  /// period's month, not the (possibly later) payment month.
+  IntColumn get rateFixingDay => integer().named('rate_fixing_day').nullable()();
 
   BoolColumn get isActive => boolean().named('is_active').withDefault(const Constant(true))();
 }

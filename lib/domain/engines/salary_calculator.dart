@@ -32,10 +32,15 @@ import 'currency_converter.dart';
 ///    otherwise calling `forecast` once per part would subtract the full
 ///    fixed deduction from each part, over-deducting by a multiple of the
 ///    part count.
-/// 4. The expected date is [IncomeScheduleRule.paymentDay] in [year]/[month],
-///    adjusted by [IncomeScheduleRule.weekendShiftRule].
-/// 5. The exchange rate is fixed [IncomeScheduleRule.rateFixingOffsetDays]
-///    days before the expected date (or on the expected date itself).
+/// 4. The expected date is [IncomeScheduleRule.paymentDay] in
+///    [year]/`month + `[IncomeScheduleRule.paymentMonthOffset] (payroll
+///    commonly pays a period in the month that follows it), adjusted by
+///    [IncomeScheduleRule.weekendShiftRule].
+/// 5. The exchange rate is fixed on [IncomeScheduleRule.rateFixingDay] of
+///    the *forecasted period's* [year]/[month] — not the payment month —
+///    so every part of the same period shares one rate even when paid in
+///    different months; `null` means the rate is fixed on the expected
+///    date itself.
 /// 6. The net contract-currency amount is converted to
 ///    [IncomeSource.payoutCurrency] via [CurrencyConverter]. Both returned
 ///    amounts are rounded to [roundingScale] fractional digits — the
@@ -66,7 +71,7 @@ class SalaryCalculator {
 
     final expectedDate = _resolvePaymentDate(
       year: year,
-      month: month,
+      month: month + rule.paymentMonthOffset,
       paymentDay: rule.paymentDay,
       shiftRule: rule.weekendShiftRule,
     );
@@ -94,7 +99,9 @@ class SalaryCalculator {
       );
     }
 
-    final rateFixingDate = expectedDate.subtract(Duration(days: rule.rateFixingOffsetDays ?? 0));
+    final rateFixingDate = rule.rateFixingDay == null
+        ? expectedDate
+        : _clampedDate(year: year, month: month, day: rule.rateFixingDay!);
     final conversion = await _currencyConverter.convert(
       amount: partNet,
       to: source.payoutCurrency,
@@ -196,9 +203,7 @@ class SalaryCalculator {
     required int paymentDay,
     required WeekendShiftRule shiftRule,
   }) {
-    final lastDayOfMonth = DateTime.utc(year, month + 1, 0).day;
-    final clampedDay = paymentDay > lastDayOfMonth ? lastDayOfMonth : paymentDay;
-    var date = DateTime.utc(year, month, clampedDay);
+    var date = _clampedDate(year: year, month: month, day: paymentDay);
 
     while (shiftRule != WeekendShiftRule.none &&
         (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday)) {
@@ -207,5 +212,13 @@ class SalaryCalculator {
           : date.add(const Duration(days: 1));
     }
     return date;
+  }
+
+  /// [year]/[month]/[day], with [day] clamped to the last real day of that
+  /// month (e.g. day 31 in February becomes the 28th/29th).
+  DateTime _clampedDate({required int year, required int month, required int day}) {
+    final lastDayOfMonth = DateTime.utc(year, month + 1, 0).day;
+    final clampedDay = day > lastDayOfMonth ? lastDayOfMonth : day;
+    return DateTime.utc(year, month, clampedDay);
   }
 }

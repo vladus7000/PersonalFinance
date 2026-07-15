@@ -17,16 +17,26 @@ sealed class IncomeScheduleRule with _$IncomeScheduleRule {
     int? id,
     required int partIndex,
     required int paymentDay,
+
+    /// The payment lands in `forecast()`'s `(year, month + paymentMonthOffset)`
+    /// rather than always the same calendar month as the period being
+    /// forecast — real payroll commonly pays a period's salary early in the
+    /// *following* month (e.g. June's salary paid July 7).
+    @Default(0) int paymentMonthOffset,
     required PaymentPartAmount amount,
     required WeekendShiftRule weekendShiftRule,
 
-    /// Days before [paymentDay] the exchange rate is fixed — `null`/`0`
-    /// means the rate is taken on the payment day itself (§2.3 "расчёт по
-    /// курсу на определённый день"). Interpreted by `SalaryCalculator`
-    /// (E3.T2). A full `ExchangeRateRule` entity (doc.md §4.5) is out of
-    /// scope for MVP — rates come from the already-built
-    /// [ExchangeRateSource] instead (compat principle #2).
-    int? rateFixingOffsetDays,
+    /// Day of the forecasted period's month (`forecast()`'s `(year, month)`,
+    /// NOT the possibly-shifted payment month) on which the exchange rate is
+    /// fixed — `null` means the rate is taken on the payment date itself.
+    /// Anchored to the period, not the payment, because accounting practice
+    /// fixes one rate per period and every part of that period (advance and
+    /// main payment alike) uses it, even when the payment itself lands in a
+    /// different month (§2.3 "расчёт по курсу на определённый день").
+    /// Interpreted by `SalaryCalculator` (E3.T2). A full `ExchangeRateRule`
+    /// entity (doc.md §4.5) is out of scope for MVP — rates come from the
+    /// already-built [ExchangeRateSource] instead (compat principle #2).
+    int? rateFixingDay,
     required bool isActive,
   }) = _IncomeScheduleRule;
 }

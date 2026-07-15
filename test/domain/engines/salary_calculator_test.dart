@@ -74,28 +74,34 @@ void main() {
   IncomeScheduleRule fixedRule({
     int partIndex = 0,
     required int paymentDay,
+    int paymentMonthOffset = 0,
     required Decimal amount,
     WeekendShiftRule weekendShiftRule = WeekendShiftRule.none,
-    int? rateFixingOffsetDays,
+    int? rateFixingDay,
   }) => IncomeScheduleRule(
     partIndex: partIndex,
     paymentDay: paymentDay,
+    paymentMonthOffset: paymentMonthOffset,
     amount: PaymentPartAmount.fixed(amount: Money(amount, usd)),
     weekendShiftRule: weekendShiftRule,
-    rateFixingOffsetDays: rateFixingOffsetDays,
+    rateFixingDay: rateFixingDay,
     isActive: true,
   );
 
   IncomeScheduleRule percentRule({
     int partIndex = 0,
     required int paymentDay,
+    int paymentMonthOffset = 0,
     required Decimal percentage,
     WeekendShiftRule weekendShiftRule = WeekendShiftRule.none,
+    int? rateFixingDay,
   }) => IncomeScheduleRule(
     partIndex: partIndex,
     paymentDay: paymentDay,
+    paymentMonthOffset: paymentMonthOffset,
     amount: PaymentPartAmount.percentage(percentage: Percentage(percentage)),
     weekendShiftRule: weekendShiftRule,
+    rateFixingDay: rateFixingDay,
     isActive: true,
   );
 
@@ -220,48 +226,75 @@ void main() {
     expect(forecast.isRateStale, isFalse);
   });
 
-  test('rate fixing offset: the rate is looked up before the payment date, not on it', () async {
-    rateSource.rates.addAll([
-      ExchangeRate(
-        from: usd,
-        to: uah,
-        rate: Decimal.parse('41.00'),
-        effectiveDate: DateTime.utc(2026, 7, 13),
-        source: 'manual',
-        isFinal: true,
-      ),
-      ExchangeRate(
-        from: usd,
-        to: uah,
-        rate: Decimal.parse('42.00'),
-        effectiveDate: DateTime.utc(2026, 7, 15),
-        source: 'manual',
-        isFinal: true,
-      ),
-    ]);
-    final rule = fixedRule(
-      paymentDay: 15,
-      amount: Decimal.fromInt(100),
-      rateFixingOffsetDays: 2, // fixed on the 13th, not the 15th
-    );
-    final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
-      scheduleRules: [rule],
-      payoutCurrency: uah,
-    );
+  test(
+    'rate fixing day is anchored to the period, not the (possibly later) payment month',
+    () async {
+      // June's rate is fixed on June 1st; June's salary is paid July 7th
+      // (advance) and July 20th (main) — both parts must use the June 1
+      // rate, not a rate looked up around their own July payment dates.
+      rateSource.rates.addAll([
+        ExchangeRate(
+          from: usd,
+          to: uah,
+          rate: Decimal.parse('40.00'),
+          effectiveDate: DateTime.utc(2026, 6, 1),
+          source: 'manual',
+          isFinal: true,
+        ),
+        ExchangeRate(
+          from: usd,
+          to: uah,
+          rate: Decimal.parse('42.00'), // must NOT be picked
+          effectiveDate: DateTime.utc(2026, 7, 20),
+          source: 'manual',
+          isFinal: true,
+        ),
+      ]);
+      final advance = fixedRule(
+        partIndex: 0,
+        paymentDay: 7,
+        paymentMonthOffset: 1,
+        amount: Decimal.fromInt(50),
+        rateFixingDay: 1,
+      );
+      final main = fixedRule(
+        partIndex: 1,
+        paymentDay: 20,
+        paymentMonthOffset: 1,
+        amount: Decimal.fromInt(50),
+        rateFixingDay: 1,
+      );
+      final source = buildSource(
+        calculationMode: IncomeCalculationMode.fixed,
+        scheduleRules: [advance, main],
+        payoutCurrency: uah,
+      );
 
-    final forecast = forecastOf(
-      await calculator.forecast(
-        source: source,
-        rule: rule,
-        year: 2026,
-        month: 7,
-        countryCode: 'UA',
-      ),
-    ).forecast;
+      final advanceForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: advance,
+          year: 2026,
+          month: 6, // the period being forecast is June
+          countryCode: 'UA',
+        ),
+      ).forecast;
+      final mainForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: main,
+          year: 2026,
+          month: 6,
+          countryCode: 'UA',
+        ),
+      ).forecast;
 
-    expect(forecast.rate, Decimal.parse('41.00'));
-  });
+      expect(advanceForecast.expectedDate, DateTime.utc(2026, 7, 7));
+      expect(mainForecast.expectedDate, DateTime.utc(2026, 7, 20));
+      expect(advanceForecast.rate, Decimal.parse('40.00'));
+      expect(mainForecast.rate, Decimal.parse('40.00'));
+    },
+  );
 
   test('percentage deduction reduces the part amount directly', () async {
     final rule = fixedRule(paymentDay: 30, amount: Decimal.fromInt(5500));
