@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/time/clock.dart';
 import 'backup/database_backup.dart';
 import 'tables/exchange_rates_table.dart';
+import 'tables/income_schedule_rules_table.dart';
+import 'tables/income_sources_table.dart';
 import 'tables/net_worth_snapshots_table.dart';
 import 'tables/user_profiles_table.dart';
 
@@ -18,7 +20,9 @@ part 'app_database.g.dart';
 /// The app's single local database. Offline-first — see doc.md §7.7.
 ///
 /// Tables are added incrementally by later BUILD_PLAN tasks.
-@DriftDatabase(tables: [ExchangeRates, NetWorthSnapshots, UserProfiles])
+@DriftDatabase(
+  tables: [ExchangeRates, NetWorthSnapshots, UserProfiles, IncomeSources, IncomeScheduleRules],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase({Clock clock = const SystemClock()}) : super(_openConnection(clock));
 

@@ -337,6 +337,16 @@ i18n-каркасом и CI. Экраны — пустые заглушки.
 - **DoD:** CRUD источника с ≥2 частями выплаты покрыт тестом.
 - **Зависимости:** E1.T5, E2.T1
 
+> Примечание: часть полей doc.md §4.2/§4.3 сознательно не перенесена в схему — `userId` (в MVP один
+> локальный пользователь, как и у `UserProfile`); `frequency`/`payoutsPerMonth` (MVP работает только
+> с месячным циклом, §2.6, а число частей выплаты и так равно `scheduleRules.length` — отдельное
+> поле дублировало бы источник истины); `workdayCalculationEnabled` (смысл покрыт
+> `calculationMode == byWorkingDays`); `exchangeRateRuleId` (E3.T2 берёт курс через уже готовый
+> `ExchangeRateSource`, compat-принцип №2 — полноценная `ExchangeRateRule`, §4.5, вне объёма MVP);
+> `notificationOffset` (некуда подключать до `flutter_local_notifications`, E10). `IncomeSource` —
+> aggregate root над своими `IncomeScheduleRule` (читаются/пишутся вместе одной транзакцией), как
+> `FinancialDecision` в §0.1 п.6 — правило само по себе не имеет смысла вне контекста источника.
+
 ### E3.T2 — Движок `SalaryCalculator` (чистый домен)
 - **Контекст:** §2.3 — САМАЯ ответственная логика. Спецификация должна быть детерминированной.
 - **Действия:** `domain/engines/salary_calculator.dart`. Вход: правило источника + рабочие дни/отработанные
