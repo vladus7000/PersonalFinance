@@ -22,6 +22,11 @@ sealed class ConversionOutcome with _$ConversionOutcome {
     required Decimal rate,
     required DateTime rateEffectiveDate,
     required bool isStale,
+
+    /// The [ExchangeRate.source] the rate came from (e.g. `'manual'`), or
+    /// `'identity'` when [from] == [to] and no lookup happened — doc.md
+    /// §2.4/§5.9 require the rate source to be surfaced to the user.
+    required String rateSource,
   }) = ConvertedOutcome;
 
   const factory ConversionOutcome.missing({
@@ -54,6 +59,7 @@ class CurrencyConverter {
         rate: Decimal.one,
         rateEffectiveDate: asOf,
         isStale: false,
+        rateSource: 'identity',
       );
     }
 
@@ -67,6 +73,7 @@ class CurrencyConverter {
         rate: direct.rate,
         rateEffectiveDate: direct.effectiveDate,
         isStale: !_isSameDate(direct.effectiveDate, asOf),
+        rateSource: direct.source,
       );
     }
 
@@ -78,6 +85,7 @@ class CurrencyConverter {
         rate: invertedRate,
         rateEffectiveDate: inverse.effectiveDate,
         isStale: !_isSameDate(inverse.effectiveDate, asOf),
+        rateSource: inverse.source,
       );
     }
 

@@ -50,6 +50,7 @@ void main() {
         rate: Decimal.one,
         rateEffectiveDate: today,
         isStale: false,
+        rateSource: 'identity',
       ),
     );
   });
@@ -75,6 +76,7 @@ void main() {
     final converted = outcome as ConvertedOutcome;
     expect(converted.money, Money(Decimal.parse('4170.00'), uah));
     expect(converted.isStale, isFalse);
+    expect(converted.rateSource, 'manual');
   });
 
   test('reverse rate: only UAH->USD is stored, USD->UAH is derived by inversion', () async {
@@ -97,6 +99,7 @@ void main() {
 
     final converted = outcome as ConvertedOutcome;
     expect(converted.money, Money(Decimal.parse('4000.0000000000'), uah));
+    expect(converted.rateSource, 'manual');
   });
 
   test('missing rate: neither direct nor reverse exists -> flagged missing', () async {
