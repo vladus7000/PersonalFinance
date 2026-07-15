@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:personal_finance_assistant/features/onboarding/presentation/currency_step_screen.dart';
+import 'package:personal_finance_assistant/features/onboarding/presentation/income_calculation_step_screen.dart';
+import 'package:personal_finance_assistant/features/onboarding/presentation/income_step_screen.dart';
 import 'package:personal_finance_assistant/features/onboarding/presentation/life_expenses_step_screen.dart';
 import 'package:personal_finance_assistant/features/onboarding/presentation/onboarding_shell.dart';
 
@@ -11,18 +13,38 @@ void main() {
     return OnboardingShell(
       stepBuilder: (context, stepId) => switch (stepId) {
         'currency' => const CurrencyStepScreen(),
+        'income' => const IncomeStepScreen(),
+        'income_calculation' => const IncomeCalculationStepScreen(),
         'life_expenses' => const LifeExpensesStepScreen(),
         _ => const SizedBox.shrink(),
       },
     );
   }
 
+  /// Fills in just enough of the income steps to unblock progression — a
+  /// single payment (the default) only requires a name, an amount, and a
+  /// payment day; every other field already has a valid default.
+  Future<void> fillMinimalIncomeSteps(WidgetTester tester) async {
+    expect(find.byType(IncomeStepScreen), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Main job');
+    await tester.enterText(find.byType(TextField).at(1), '5000');
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IncomeCalculationStepScreen), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '15');
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('currency selection survives navigating to the next step and back', (
     tester,
   ) async {
     // No provider override — this exercises the real onboardingStepsProvider
-    // (currency, life_expenses), proving the two steps E2.T3 added actually
-    // work end to end, not just in isolation.
+    // (currency, income, income_calculation, life_expenses), proving these
+    // steps actually work end to end, not just in isolation.
     await pumpApp(tester, buildRealFlow());
 
     // Primary defaults to the first common currency (USD); switch it to EUR.
@@ -37,11 +59,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'UAH'));
     await tester.pump();
 
-    // Advance to step 4 (life_expenses is optional, so Next is now enabled
-    // because currency — the required step — is complete).
+    // Advance to the next step (income — currency is complete, the
+    // required step, so Next is enabled).
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
-    expect(find.byType(LifeExpensesStepScreen), findsOneWidget);
+    expect(find.byType(IncomeStepScreen), findsOneWidget);
 
     // Go back and confirm the selections were retained, not reset.
     await tester.tap(find.byIcon(Icons.arrow_back));
@@ -68,6 +90,8 @@ void main() {
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
 
+    await fillMinimalIncomeSteps(tester);
+
     expect(find.byType(LifeExpensesStepScreen), findsOneWidget);
 
     await tester.tap(find.text('% of income'));
@@ -75,10 +99,24 @@ void main() {
     await tester.enterText(find.byType(TextField), '35');
     await tester.pump();
 
-    // Skip forward and back within the same step is not applicable (it's
-    // the last step); instead go back to currency and return here.
+    // Go back through the income steps to currency and return here.
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
+    expect(find.byType(IncomeCalculationStepScreen), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    expect(find.byType(IncomeStepScreen), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+    expect(find.byType(CurrencyStepScreen), findsOneWidget);
+
+    // ...and all the way forward again.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(IncomeStepScreen), findsOneWidget);
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(IncomeCalculationStepScreen), findsOneWidget);
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
 

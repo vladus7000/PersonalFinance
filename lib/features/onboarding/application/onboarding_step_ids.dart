@@ -4,5 +4,7 @@
 /// the other.
 abstract final class OnboardingStepIds {
   static const currency = 'currency';
+  static const income = 'income';
+  static const incomeCalculation = 'income_calculation';
   static const lifeExpenses = 'life_expenses';
 }

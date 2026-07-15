@@ -79,5 +79,53 @@
   "onboardingSummaryOpenDashboard": "Open Dashboard",
   "@onboardingSummaryOpenDashboard": {
     "description": "Onboarding completion screen: button that saves the profile and opens Dashboard"
-  }
+  },
+  "onboardingIncomeTitle": "Your income",
+  "@onboardingIncomeTitle": {
+    "description": "Onboarding step 2 title (doc.md §3.3 step 2)"
+  },
+  "onboardingIncomeNameLabel": "Name",
+  "onboardingIncomeNameHint": "e.g. Main job",
+  "onboardingIncomeTypeLabel": "Type",
+  "incomeTypeSalary": "Salary",
+  "incomeTypeFreelance": "Freelance",
+  "incomeTypeBusiness": "Business",
+  "incomeTypeRental": "Rental",
+  "incomeTypeDividend": "Dividend",
+  "incomeTypeOther": "Other",
+  "onboardingIncomeAmountLabel": "Amount",
+  "onboardingIncomeContractCurrencyLabel": "Contract currency",
+  "onboardingIncomePayoutCurrencyLabel": "Payout currency",
+  "onboardingIncomePayoutsPerMonthLabel": "Payments per month",
+  "onboardingIncomePayoutsPerMonthOnce": "Once",
+  "onboardingIncomePayoutsPerMonthTwice": "Advance + main payment",
+  "onboardingIncomeCalculationTitle": "How it's calculated",
+  "@onboardingIncomeCalculationTitle": {
+    "description": "Onboarding step 3 title (doc.md §3.3 step 3)"
+  },
+  "onboardingIncomeCalculationModeFixed": "Fixed regardless of days worked",
+  "onboardingIncomeCalculationModeByWorkingDays": "Prorated by working days",
+  "onboardingIncomePartTitle": "Payment {index}",
+  "@onboardingIncomePartTitle": {
+    "description": "Section header for one payment part in the income calculation step",
+    "placeholders": {
+      "index": {"type": "int"}
+    }
+  },
+  "onboardingIncomePartPaymentDayLabel": "Day of month",
+  "onboardingIncomePartWeekendShiftLabel": "If it falls on a weekend",
+  "weekendShiftRuleNone": "Keep the date",
+  "weekendShiftRuleMoveToPreviousBusinessDay": "Move earlier",
+  "weekendShiftRuleMoveToNextBusinessDay": "Move later",
+  "onboardingIncomePartAmountModeLabel": "This payment is",
+  "paymentPartAmountModePercentage": "% of the amount",
+  "paymentPartAmountModeFixed": "A fixed amount",
+  "onboardingIncomePartPercentageLabel": "Percentage",
+  "onboardingIncomePartFixedAmountLabel": "Amount",
+  "onboardingIncomeDeductionLabel": "Withholding",
+  "deductionRuleModeNone": "None",
+  "deductionRuleModeFixed": "Fixed amount",
+  "deductionRuleModePercentage": "Percentage",
+  "onboardingIncomeDeductionAmountLabel": "Amount withheld",
+  "onboardingIncomeDeductionPercentageLabel": "Percent withheld"
 }

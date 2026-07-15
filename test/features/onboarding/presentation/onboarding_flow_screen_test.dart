@@ -1,10 +1,14 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:personal_finance_assistant/app/di.dart';
 import 'package:personal_finance_assistant/core/money/currency_code.dart';
+import 'package:personal_finance_assistant/core/money/money.dart';
 import 'package:personal_finance_assistant/core/time/clock.dart';
+import 'package:personal_finance_assistant/domain/entities/income_source.dart';
 import 'package:personal_finance_assistant/domain/entities/user_profile.dart';
+import 'package:personal_finance_assistant/domain/repositories/income_source_repository.dart';
 import 'package:personal_finance_assistant/domain/repositories/user_profile_repository.dart';
 import 'package:personal_finance_assistant/main.dart';
 
@@ -17,6 +21,40 @@ class _FakeUserProfileRepository implements UserProfileRepository {
   @override
   Future<void> saveProfile(UserProfile newProfile) async {
     profile = newProfile;
+  }
+}
+
+/// In-memory fake — the onboarding flow now also persists an [IncomeSource]
+/// on completion, so this test can't rely solely on overriding
+/// [userProfileRepositoryProvider]: without this, `_completeOnboarding`
+/// would fall through to the real Drift-backed repository (and a real,
+/// unavailable-in-tests file-backed database via path_provider).
+class _FakeIncomeSourceRepository implements IncomeSourceRepository {
+  final List<IncomeSource> sources = [];
+
+  @override
+  Future<List<IncomeSource>> getAll() async => sources;
+
+  @override
+  Future<IncomeSource?> getById(int id) async =>
+      sources.where((s) => s.id == id).firstOrNull;
+
+  @override
+  Future<int> create(IncomeSource source) async {
+    final id = sources.length + 1;
+    sources.add(source.copyWith(id: id));
+    return id;
+  }
+
+  @override
+  Future<void> update(IncomeSource source) async {
+    sources.removeWhere((s) => s.id == source.id);
+    sources.add(source);
+  }
+
+  @override
+  Future<void> delete(int id) async {
+    sources.removeWhere((s) => s.id == id);
   }
 }
 
@@ -74,12 +112,14 @@ void main() {
     tester,
   ) async {
     final repository = _FakeUserProfileRepository();
+    final incomeRepository = _FakeIncomeSourceRepository();
     final clock = FixedClock(DateTime.utc(2026, 7, 15));
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           userProfileRepositoryProvider.overrideWithValue(repository),
+          incomeSourceRepositoryProvider.overrideWithValue(incomeRepository),
           clockProvider.overrideWithValue(clock),
         ],
         child: const PfaApp(),
@@ -95,6 +135,24 @@ void main() {
     // (see CurrencyStepScreen.initState) — settle, then advance since the
     // required step is already complete.
     expect(find.text('Your main currency'), findsOneWidget);
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    // Income step: name + amount are the only required fields (a single
+    // payment is the default, so every other field already has a valid
+    // default — see IncomeStepScreen doc).
+    expect(find.text('Your income'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'Main job');
+    await tester.enterText(find.byType(TextField).at(1), '5000');
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    // Income calculation step: single part -> only the payment day is
+    // required.
+    expect(find.text("How it's calculated"), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '15');
+    await tester.pump();
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
 
@@ -116,5 +174,12 @@ void main() {
     expect(repository.profile!.onboardingCompleted, isTrue);
     expect(repository.profile!.primaryCurrency, CurrencyCode('USD'));
     expect(repository.profile!.createdAt, clock.now());
+
+    expect(incomeRepository.sources, hasLength(1));
+    final source = incomeRepository.sources.single;
+    expect(source.name, 'Main job');
+    expect(source.nominalAmount, Money(Decimal.fromInt(5000), CurrencyCode('USD')));
+    expect(source.scheduleRules, hasLength(1));
+    expect(source.scheduleRules.single.paymentDay, 15);
   });
 }

@@ -8,8 +8,11 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../core/time/clock.dart';
 import '../data/db/app_database.dart';
+import '../data/repositories/drift_income_source_repository.dart';
 import '../data/repositories/drift_user_profile_repository.dart';
+import '../domain/entities/income_source.dart';
 import '../domain/entities/user_profile.dart';
+import '../domain/repositories/income_source_repository.dart';
 import '../domain/repositories/user_profile_repository.dart';
 
 part 'di.g.dart';
@@ -43,3 +46,13 @@ UserProfileRepository userProfileRepository(Ref ref) =>
 @riverpod
 Future<UserProfile?> userProfile(Ref ref) =>
     ref.watch(userProfileRepositoryProvider).getProfile();
+
+@Riverpod(keepAlive: true)
+IncomeSourceRepository incomeSourceRepository(Ref ref) =>
+    DriftIncomeSourceRepository(ref.watch(appDatabaseProvider));
+
+/// All income sources — not a reactive stream; callers must
+/// `ref.invalidate(incomeSourcesProvider)` after create/update/delete.
+@riverpod
+Future<List<IncomeSource>> incomeSources(Ref ref) =>
+    ref.watch(incomeSourceRepositoryProvider).getAll();
