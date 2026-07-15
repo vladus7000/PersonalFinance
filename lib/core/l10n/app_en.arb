@@ -105,24 +105,69 @@
   },
   "onboardingIncomeCalculationModeFixed": "Fixed regardless of days worked",
   "onboardingIncomeCalculationModeByWorkingDays": "Prorated by working days",
-  "onboardingIncomePartTitle": "Payment {index}",
-  "@onboardingIncomePartTitle": {
-    "description": "Section header for one payment part in the income calculation step",
-    "placeholders": {
-      "index": {"type": "int"}
-    }
-  },
+  "onboardingIncomeCalculationModeFixedHint": "You get the full amount every month, even if you were on vacation or sick leave.",
+  "onboardingIncomeCalculationModeByWorkingDaysHint": "If you work fewer days than the period has (vacation, sick leave, a partial month), the amount is scaled down proportionally.",
+  "onboardingIncomePartAdvanceTitle": "Advance",
+  "onboardingIncomePartMainTitle": "Main payment",
   "onboardingIncomePartPaymentDayLabel": "Day of month",
   "onboardingIncomePartWeekendShiftLabel": "If it falls on a weekend",
+  "onboardingIncomePartWeekendShiftHint": "If the payment day above lands on a Saturday or Sunday, this decides whether the actual payment stays on that date or moves to the closest weekday.",
   "weekendShiftRuleNone": "Keep the date",
   "weekendShiftRuleMoveToPreviousBusinessDay": "Move earlier",
   "weekendShiftRuleMoveToNextBusinessDay": "Move later",
+  "onboardingIncomePartMonthLabel": "Which month it's paid in",
+  "paymentMonthOffsetSameMonth": "This month",
+  "paymentMonthOffsetNextMonth": "Next month",
+  "onboardingIncomePartMonthHint": "Some payroll schemes pay a period's salary early in the following month (e.g. June's salary paid on July 7th).",
   "onboardingIncomePartAmountModeLabel": "This payment is",
   "paymentPartAmountModePercentage": "% of the amount",
   "paymentPartAmountModeFixed": "A fixed amount",
   "onboardingIncomePartPercentageLabel": "Percentage",
   "onboardingIncomePartFixedAmountLabel": "Amount",
+  "onboardingIncomeMainPaymentAuto": "Main payment: {value} (the rest, calculated automatically)",
+  "@onboardingIncomeMainPaymentAuto": {
+    "description": "Read-only preview of the main payment's auto-computed amount (whatever's left after the advance)",
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "onboardingIncomePartCoverageLabel": "Paid for days",
+  "onboardingIncomePartCoverageFromLabel": "From day",
+  "onboardingIncomePartCoverageToLabel": "To day",
+  "onboardingIncomePartCoverageHint": "The days this specific payment covers — e.g. the advance covers the 1st-15th, the main payment covers the 16th-30th. The amount is worked out from attendance in exactly this range.",
+  "onboardingIncomePartAmountDependsOnAttendance": "The exact amount depends on days actually worked in this range — you confirm it when the payment arrives.",
+  "onboardingIncomeRateFixingLabel": "When the exchange rate is fixed",
+  "onboardingIncomeRateFixingHint": "If both payments belong to the same month's salary, payroll usually fixes one rate for the whole month (e.g. the 1st) instead of a separate rate per payment.",
+  "rateFixingModeOnPaymentDate": "On each payment's own date",
+  "rateFixingModeSpecificDay": "On a specific day of the month",
+  "onboardingIncomeRateFixingDayLabel": "Day of the month",
+  "onboardingIncomeFieldRequired": "Required",
+  "onboardingIncomeFieldInvalidDay": "Enter a day from 1 to 31",
+  "onboardingIncomeFieldInvalidNumber": "Enter a number",
+  "onboardingIncomeCoverageRangeInvalid": "Must be on or after the \"from\" day",
+  "onboardingIncomePreviewRateLabel": "{from} → {to} rate (for this preview only)",
+  "@onboardingIncomePreviewRateLabel": {
+    "placeholders": {
+      "from": {"type": "String"},
+      "to": {"type": "String"}
+    }
+  },
+  "onboardingIncomePreviewRateHint": "Not saved — only used to estimate the amounts below.",
+  "onboardingIncomePartPreviewAmount": "≈ {value}",
+  "@onboardingIncomePartPreviewAmount": {
+    "description": "Rough preview of a part's amount converted to the payout currency",
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "onboardingIncomePartPreviewMissingRate": "Enter a rate above to see this in {currency}",
+  "@onboardingIncomePartPreviewMissingRate": {
+    "placeholders": {
+      "currency": {"type": "String"}
+    }
+  },
   "onboardingIncomeDeductionLabel": "Withholding",
+  "onboardingIncomeDeductionHint": "Money subtracted from your income before you receive it — e.g. income tax or other mandatory payroll deductions. Leave as \"None\" if you're not sure.",
   "deductionRuleModeNone": "None",
   "deductionRuleModeFixed": "Fixed amount",
   "deductionRuleModePercentage": "Percentage",

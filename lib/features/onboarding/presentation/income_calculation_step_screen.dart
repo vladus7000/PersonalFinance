@@ -18,24 +18,40 @@ enum _AmountMode { percentage, fixed }
 
 enum _DeductionMode { none, fixed, percentage }
 
+enum _RateFixingMode { onPaymentDate, specificDay }
+
 class _PartFormState {
   final dayController = TextEditingController();
   WeekendShiftRule weekendShiftRule = WeekendShiftRule.none;
-  _AmountMode amountMode = _AmountMode.percentage;
-  final percentageController = TextEditingController();
-  final fixedController = TextEditingController();
+  int paymentMonthOffset = 0;
+  final coverageStartController = TextEditingController();
+  final coverageEndController = TextEditingController();
 
   void dispose() {
     dayController.dispose();
-    percentageController.dispose();
-    fixedController.dispose();
+    coverageStartController.dispose();
+    coverageEndController.dispose();
   }
 }
 
-/// Onboarding step 3 (doc.md §3.3): [IncomeCalculationStepData] — how many
-/// parts to render is fixed by [IncomeStepData.payoutsPerMonth] (set in the
-/// previous step). A single-part source skips asking for that part's
-/// amount at all — it is implicitly the full nominal amount.
+/// Onboarding step 3 (doc.md §3.3, §8.18): [IncomeCalculationStepData] — how
+/// many parts to render is fixed by [IncomeStepData.payoutsPerMonth] (set
+/// in the previous step).
+///
+/// `calculationMode` selects between two entirely different "mechanics"
+/// (see `SalaryCalculator` doc): `fixed` splits the nominal amount between
+/// parts by percentage/fixed value, independent of attendance — a
+/// single-part source implies the full amount, so it never asks for a
+/// value at all. `byWorkingDays` does NOT use a percentage/fixed split;
+/// instead each part is paid for attendance within its own
+/// [IncomePartInput.coverageStartDay]-`coverageEndDay` range (e.g. an
+/// advance covering the 1st-15th, a main payment covering the 16th-30th),
+/// so that range is asked for instead — the actual amount depends on
+/// attendance and isn't known until the payment is confirmed later.
+///
+/// When the payout currency differs from the contract currency, an
+/// optional, never-persisted "preview rate" lets the user see roughly how
+/// much a `fixed`-mode part converts to.
 class IncomeCalculationStepScreen extends ConsumerStatefulWidget {
   const IncomeCalculationStepScreen({super.key});
 
@@ -47,9 +63,17 @@ class IncomeCalculationStepScreen extends ConsumerStatefulWidget {
 class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationStepScreen> {
   IncomeCalculationMode _mode = IncomeCalculationMode.fixed;
   late final List<_PartFormState> _parts;
+  _AmountMode _advanceAmountMode = _AmountMode.percentage;
+  final _advancePercentageController = TextEditingController();
+  final _advanceFixedController = TextEditingController();
+  _RateFixingMode _rateFixingMode = _RateFixingMode.onPaymentDate;
+  final _rateFixingDayController = TextEditingController();
+  final _previewRateController = TextEditingController();
   _DeductionMode _deductionMode = _DeductionMode.none;
   final _deductionAmountController = TextEditingController();
   final _deductionPercentController = TextEditingController();
+
+  bool get _hasTwoParts => _parts.length == 2;
 
   IncomeStepData? get _incomeData =>
       ref.read(onboardingControllerProvider).stepData[OnboardingStepIds.income]
@@ -67,6 +91,10 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     if (existing == null) return;
 
     _mode = existing.calculationMode;
+    if (existing.rateFixingDay != null) {
+      _rateFixingMode = _RateFixingMode.specificDay;
+      _rateFixingDayController.text = existing.rateFixingDay.toString();
+    }
     switch (existing.deductionRule) {
       case NoDeduction():
         _deductionMode = _DeductionMode.none;
@@ -78,16 +106,23 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
         _deductionPercentController.text = percentage.value.toString();
     }
     for (var i = 0; i < _parts.length && i < existing.parts.length; i++) {
-      final part = existing.parts[i];
-      _parts[i].dayController.text = part.paymentDay.toString();
-      _parts[i].weekendShiftRule = part.weekendShiftRule;
-      switch (part.amount) {
+      final existingPart = existing.parts[i];
+      _parts[i].dayController.text = existingPart.paymentDay.toString();
+      _parts[i].weekendShiftRule = existingPart.weekendShiftRule;
+      _parts[i].paymentMonthOffset = existingPart.paymentMonthOffset;
+      _parts[i].coverageStartController.text = existingPart.coverageStartDay.toString();
+      _parts[i].coverageEndController.text = existingPart.coverageEndDay.toString();
+    }
+    if (_hasTwoParts && existing.parts.isNotEmpty) {
+      switch (existing.parts.first.amount) {
         case PercentagePaymentPart(:final percentage):
-          _parts[i].amountMode = _AmountMode.percentage;
-          _parts[i].percentageController.text = percentage.value.toString();
+          _advanceAmountMode = _AmountMode.percentage;
+          _advancePercentageController.text = percentage.value.toString();
         case FixedPaymentPart(:final amount):
-          _parts[i].amountMode = _AmountMode.fixed;
-          _parts[i].fixedController.text = amount.amount.toString();
+          _advanceAmountMode = _AmountMode.fixed;
+          _advanceFixedController.text = amount.amount.toString();
+        case null:
+          break;
       }
     }
   }
@@ -97,6 +132,10 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     for (final part in _parts) {
       part.dispose();
     }
+    _advancePercentageController.dispose();
+    _advanceFixedController.dispose();
+    _rateFixingDayController.dispose();
+    _previewRateController.dispose();
     _deductionAmountController.dispose();
     _deductionPercentController.dispose();
     super.dispose();
@@ -108,31 +147,81 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
         .setStepData(OnboardingStepIds.incomeCalculation, null, completed: false);
   }
 
+  /// The advance's amount, and (for a two-part source) the main payment's
+  /// amount — always "the rest" of the nominal amount, so the two parts
+  /// are guaranteed to add up. Only meaningful in `fixed` mode. Returns
+  /// `null` if the advance amount hasn't been entered (or doesn't parse).
+  (PaymentPartAmount advance, PaymentPartAmount? mainPayment)? _resolveFixedAmounts(
+    Money nominalAmount,
+  ) {
+    if (!_hasTwoParts) return (PaymentPartAmount.fixed(amount: nominalAmount), null);
+
+    if (_advanceAmountMode == _AmountMode.percentage) {
+      final percentage = Decimal.tryParse(_advancePercentageController.text);
+      if (percentage == null) return null;
+      return (
+        PaymentPartAmount.percentage(percentage: Percentage(percentage)),
+        PaymentPartAmount.percentage(
+          percentage: Percentage(Decimal.fromInt(100) - percentage),
+        ),
+      );
+    }
+
+    final value = Decimal.tryParse(_advanceFixedController.text);
+    if (value == null) return null;
+    return (
+      PaymentPartAmount.fixed(amount: Money(value, nominalAmount.currency)),
+      PaymentPartAmount.fixed(
+        amount: Money(nominalAmount.amount - value, nominalAmount.currency),
+      ),
+    );
+  }
+
   void _apply() {
     final incomeData = _incomeData;
     if (incomeData == null) return _markIncomplete();
 
+    int? rateFixingDay;
+    if (_rateFixingMode == _RateFixingMode.specificDay) {
+      rateFixingDay = int.tryParse(_rateFixingDayController.text);
+      if (rateFixingDay == null || rateFixingDay < 1 || rateFixingDay > 31) {
+        return _markIncomplete();
+      }
+    }
+
+    List<PaymentPartAmount?>? fixedAmounts;
+    if (_mode == IncomeCalculationMode.fixed) {
+      final resolved = _resolveFixedAmounts(incomeData.nominalAmount);
+      if (resolved == null) return _markIncomplete();
+      fixedAmounts = [resolved.$1, if (_hasTwoParts) resolved.$2];
+    }
+
     final parts = <IncomePartInput>[];
-    for (final part in _parts) {
+    for (var i = 0; i < _parts.length; i++) {
+      final part = _parts[i];
       final day = int.tryParse(part.dayController.text);
       if (day == null || day < 1 || day > 31) return _markIncomplete();
 
-      final PaymentPartAmount amount;
-      if (_parts.length == 1) {
-        amount = PaymentPartAmount.fixed(amount: incomeData.nominalAmount);
-      } else if (part.amountMode == _AmountMode.percentage) {
-        final percentage = Decimal.tryParse(part.percentageController.text);
-        if (percentage == null) return _markIncomplete();
-        amount = PaymentPartAmount.percentage(percentage: Percentage(percentage));
-      } else {
-        final value = Decimal.tryParse(part.fixedController.text);
-        if (value == null) return _markIncomplete();
-        amount = PaymentPartAmount.fixed(
-          amount: Money(value, incomeData.nominalAmount.currency),
-        );
+      var coverageStart = 1;
+      var coverageEnd = 31;
+      if (_hasTwoParts && _mode == IncomeCalculationMode.byWorkingDays) {
+        final start = int.tryParse(part.coverageStartController.text);
+        final end = int.tryParse(part.coverageEndController.text);
+        if (start == null || start < 1 || start > 31) return _markIncomplete();
+        if (end == null || end < 1 || end > 31 || end < start) return _markIncomplete();
+        coverageStart = start;
+        coverageEnd = end;
       }
+
       parts.add(
-        IncomePartInput(paymentDay: day, weekendShiftRule: part.weekendShiftRule, amount: amount),
+        IncomePartInput(
+          coverageStartDay: coverageStart,
+          coverageEndDay: coverageEnd,
+          paymentDay: day,
+          paymentMonthOffset: part.paymentMonthOffset,
+          weekendShiftRule: part.weekendShiftRule,
+          amount: _mode == IncomeCalculationMode.fixed ? fixedAmounts![i] : null,
+        ),
       );
     }
 
@@ -160,6 +249,7 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             calculationMode: _mode,
             parts: parts,
             deductionRule: deductionRule,
+            rateFixingDay: rateFixingDay,
           ),
           completed: true,
         );
@@ -171,16 +261,91 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     WeekendShiftRule.moveToNextBusinessDay => l10n.weekendShiftRuleMoveToNextBusinessDay,
   };
 
-  Widget _buildPart(BuildContext context, AppLocalizations l10n, int index) {
+  String? _dayFieldError(AppLocalizations l10n, String text) {
+    if (text.isEmpty) return l10n.onboardingIncomeFieldRequired;
+    final day = int.tryParse(text);
+    if (day == null || day < 1 || day > 31) return l10n.onboardingIncomeFieldInvalidDay;
+    return null;
+  }
+
+  String? _numberFieldError(AppLocalizations l10n, String text) {
+    if (text.isEmpty) return l10n.onboardingIncomeFieldRequired;
+    if (Decimal.tryParse(text) == null) return l10n.onboardingIncomeFieldInvalidNumber;
+    return null;
+  }
+
+  String? _coverageEndError(AppLocalizations l10n, String startText, String endText) {
+    final dayError = _dayFieldError(l10n, endText);
+    if (dayError != null) return dayError;
+    final start = int.tryParse(startText);
+    final end = int.tryParse(endText);
+    if (start != null && end != null && end < start) {
+      return l10n.onboardingIncomeCoverageRangeInvalid;
+    }
+    return null;
+  }
+
+  /// A human-readable preview of the main payment's auto-computed amount,
+  /// e.g. "50%" or "2 750.00 USD" — shown read-only so the user can see
+  /// what "the rest" resolves to instead of it being a black box.
+  /// `fixed` mode only.
+  String? _mainPaymentPreview(IncomeStepData incomeData) {
+    final amounts = _resolveFixedAmounts(incomeData.nominalAmount);
+    if (amounts == null) return null;
+    return switch (amounts.$2) {
+      PercentagePaymentPart(:final percentage) => '${percentage.value}%',
+      FixedPaymentPart(:final amount) => amount.toCanonicalString(),
+      null => null,
+    };
+  }
+
+  /// A rough, never-persisted conversion of [amount] (in the contract
+  /// currency) to the payout currency, using whatever the user typed into
+  /// [_previewRateController] — `fixed` mode only (no proration/deduction
+  /// applied), unlike the real forecast (E3.T4).
+  Widget _buildAmountPreview(
+    BuildContext context,
+    AppLocalizations l10n,
+    PaymentPartAmount amount,
+    IncomeStepData incomeData,
+  ) {
+    final contractCurrency = incomeData.nominalAmount.currency;
+    final payoutCurrency = incomeData.payoutCurrency;
+    if (contractCurrency == payoutCurrency) return const SizedBox.shrink();
+
+    final grossInContract = switch (amount) {
+      FixedPaymentPart(:final amount) => amount,
+      PercentagePaymentPart(:final percentage) => percentage.of(incomeData.nominalAmount),
+    };
+    final rate = Decimal.tryParse(_previewRateController.text);
+    final text = rate == null
+        ? l10n.onboardingIncomePartPreviewMissingRate(payoutCurrency.value)
+        : l10n.onboardingIncomePartPreviewAmount(
+            Money(grossInContract.amount * rate, payoutCurrency).toCanonicalString(),
+          );
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+    );
+  }
+
+  Widget _buildPart(BuildContext context, AppLocalizations l10n, int index, IncomeStepData incomeData) {
     final part = _parts[index];
+    final isAdvance = index == 0;
+    final byWorkingDays = _mode == IncomeCalculationMode.byWorkingDays;
+    final amounts = _mode == IncomeCalculationMode.fixed
+        ? _resolveFixedAmounts(incomeData.nominalAmount)
+        : null;
+    final partAmount = amounts == null ? null : (isAdvance ? amounts.$1 : amounts.$2);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_parts.length > 1)
+          if (_hasTwoParts)
             Text(
-              l10n.onboardingIncomePartTitle(index + 1),
+              isAdvance ? l10n.onboardingIncomePartAdvanceTitle : l10n.onboardingIncomePartMainTitle,
               style: Theme.of(context).textTheme.titleMedium,
             ),
           const SizedBox(height: 8),
@@ -190,64 +355,169 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
                 child: TextField(
                   controller: part.dayController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: l10n.onboardingIncomePartPaymentDayLabel),
+                  decoration: InputDecoration(
+                    labelText: l10n.onboardingIncomePartPaymentDayLabel,
+                    errorText: _dayFieldError(l10n, part.dayController.text),
+                  ),
                   onChanged: (_) => setState(_apply),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 flex: 2,
-                child: DropdownButton<WeekendShiftRule>(
-                  value: part.weekendShiftRule,
-                  isExpanded: true,
-                  items: [
-                    for (final rule in WeekendShiftRule.values)
-                      DropdownMenuItem(value: rule, child: Text(_weekendShiftLabel(l10n, rule))),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      part.weekendShiftRule = value;
-                      _apply();
-                    });
-                  },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: l10n.onboardingIncomePartWeekendShiftLabel,
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<WeekendShiftRule>(
+                      value: part.weekendShiftRule,
+                      isExpanded: true,
+                      items: [
+                        for (final rule in WeekendShiftRule.values)
+                          DropdownMenuItem(
+                            value: rule,
+                            child: Text(_weekendShiftLabel(l10n, rule)),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          part.weekendShiftRule = value;
+                          _apply();
+                        });
+                      },
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          if (_parts.length > 1) ...[
-            const SizedBox(height: 8),
-            SegmentedButton<_AmountMode>(
+          Text(
+            l10n.onboardingIncomePartWeekendShiftHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_hasTwoParts) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.onboardingIncomePartMonthLabel,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            SegmentedButton<int>(
               segments: [
-                ButtonSegment(
-                  value: _AmountMode.percentage,
-                  label: Text(l10n.paymentPartAmountModePercentage),
-                ),
-                ButtonSegment(
-                  value: _AmountMode.fixed,
-                  label: Text(l10n.paymentPartAmountModeFixed),
-                ),
+                ButtonSegment(value: 0, label: Text(l10n.paymentMonthOffsetSameMonth)),
+                ButtonSegment(value: 1, label: Text(l10n.paymentMonthOffsetNextMonth)),
               ],
-              selected: {part.amountMode},
+              selected: {part.paymentMonthOffset},
               onSelectionChanged: (selection) {
                 setState(() {
-                  part.amountMode = selection.first;
+                  part.paymentMonthOffset = selection.first;
                   _apply();
                 });
               },
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: part.amountMode == _AmountMode.percentage
-                  ? part.percentageController
-                  : part.fixedController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: part.amountMode == _AmountMode.percentage
-                    ? l10n.onboardingIncomePartPercentageLabel
-                    : l10n.onboardingIncomePartFixedAmountLabel,
+            Text(
+              l10n.onboardingIncomePartMonthHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (_hasTwoParts && byWorkingDays) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.onboardingIncomePartCoverageLabel,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: part.coverageStartController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: l10n.onboardingIncomePartCoverageFromLabel,
+                      errorText: _dayFieldError(l10n, part.coverageStartController.text),
+                    ),
+                    onChanged: (_) => setState(_apply),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: part.coverageEndController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: l10n.onboardingIncomePartCoverageToLabel,
+                      errorText: _coverageEndError(
+                        l10n,
+                        part.coverageStartController.text,
+                        part.coverageEndController.text,
+                      ),
+                    ),
+                    onChanged: (_) => setState(_apply),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              l10n.onboardingIncomePartCoverageHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (!byWorkingDays) ...[
+            if (_hasTwoParts && isAdvance) ...[
+              const SizedBox(height: 12),
+              SegmentedButton<_AmountMode>(
+                segments: [
+                  ButtonSegment(
+                    value: _AmountMode.percentage,
+                    label: Text(l10n.paymentPartAmountModePercentage),
+                  ),
+                  ButtonSegment(
+                    value: _AmountMode.fixed,
+                    label: Text(l10n.paymentPartAmountModeFixed),
+                  ),
+                ],
+                selected: {_advanceAmountMode},
+                onSelectionChanged: (selection) {
+                  setState(() {
+                    _advanceAmountMode = selection.first;
+                    _apply();
+                  });
+                },
               ),
-              onChanged: (_) => setState(_apply),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _advanceAmountMode == _AmountMode.percentage
+                    ? _advancePercentageController
+                    : _advanceFixedController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: _advanceAmountMode == _AmountMode.percentage
+                      ? l10n.onboardingIncomePartPercentageLabel
+                      : l10n.onboardingIncomePartFixedAmountLabel,
+                  errorText: _numberFieldError(
+                    l10n,
+                    _advanceAmountMode == _AmountMode.percentage
+                        ? _advancePercentageController.text
+                        : _advanceFixedController.text,
+                  ),
+                ),
+                onChanged: (_) => setState(_apply),
+              ),
+            ],
+            if (_hasTwoParts && !isAdvance) ...[
+              const SizedBox(height: 12),
+              Text(
+                l10n.onboardingIncomeMainPaymentAuto(_mainPaymentPreview(incomeData) ?? '—'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+            if (partAmount != null) _buildAmountPreview(context, l10n, partAmount, incomeData),
+          ] else if (_hasTwoParts) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.onboardingIncomePartAmountDependsOnAttendance,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ],
@@ -258,6 +528,11 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final incomeData = _incomeData;
+    final needsPreviewRate =
+        _mode == IncomeCalculationMode.fixed &&
+        incomeData != null &&
+        incomeData.nominalAmount.currency != incomeData.payoutCurrency;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -288,9 +563,81 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
               });
             },
           ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              _mode == IncomeCalculationMode.fixed
+                  ? l10n.onboardingIncomeCalculationModeFixedHint
+                  : l10n.onboardingIncomeCalculationModeByWorkingDaysHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          if (_hasTwoParts) ...[
+            const SizedBox(height: 24),
+            Text(
+              l10n.onboardingIncomeRateFixingLabel,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            Text(
+              l10n.onboardingIncomeRateFixingHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<_RateFixingMode>(
+              segments: [
+                ButtonSegment(
+                  value: _RateFixingMode.onPaymentDate,
+                  label: Text(l10n.rateFixingModeOnPaymentDate),
+                ),
+                ButtonSegment(
+                  value: _RateFixingMode.specificDay,
+                  label: Text(l10n.rateFixingModeSpecificDay),
+                ),
+              ],
+              selected: {_rateFixingMode},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _rateFixingMode = selection.first;
+                  _apply();
+                });
+              },
+            ),
+            if (_rateFixingMode == _RateFixingMode.specificDay) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _rateFixingDayController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.onboardingIncomeRateFixingDayLabel,
+                  errorText: _dayFieldError(l10n, _rateFixingDayController.text),
+                ),
+                onChanged: (_) => setState(_apply),
+              ),
+            ],
+          ],
+          if (needsPreviewRate) ...[
+            const SizedBox(height: 24),
+            TextField(
+              controller: _previewRateController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: l10n.onboardingIncomePreviewRateLabel(
+                  incomeData.nominalAmount.currency.value,
+                  incomeData.payoutCurrency.value,
+                ),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            Text(
+              l10n.onboardingIncomePreviewRateHint,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 24),
-          for (var i = 0; i < _parts.length; i++) _buildPart(context, l10n, i),
+          if (incomeData != null)
+            for (var i = 0; i < _parts.length; i++) _buildPart(context, l10n, i, incomeData),
           Text(l10n.onboardingIncomeDeductionLabel, style: Theme.of(context).textTheme.labelLarge),
+          Text(l10n.onboardingIncomeDeductionHint, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 8),
           SegmentedButton<_DeductionMode>(
             segments: [
@@ -314,7 +661,10 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             TextField(
               controller: _deductionAmountController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: l10n.onboardingIncomeDeductionAmountLabel),
+              decoration: InputDecoration(
+                labelText: l10n.onboardingIncomeDeductionAmountLabel,
+                errorText: _numberFieldError(l10n, _deductionAmountController.text),
+              ),
               onChanged: (_) => setState(_apply),
             ),
           ],
@@ -323,7 +673,10 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             TextField(
               controller: _deductionPercentController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: l10n.onboardingIncomeDeductionPercentageLabel),
+              decoration: InputDecoration(
+                labelText: l10n.onboardingIncomeDeductionPercentageLabel,
+                errorText: _numberFieldError(l10n, _deductionPercentController.text),
+              ),
               onChanged: (_) => setState(_apply),
             ),
           ],

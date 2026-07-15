@@ -51,23 +51,67 @@
   "onboardingIncomeCalculationTitle": "Как рассчитывается",
   "onboardingIncomeCalculationModeFixed": "Фиксированно, независимо от отработанных дней",
   "onboardingIncomeCalculationModeByWorkingDays": "Пропорционально рабочим дням",
-  "onboardingIncomePartTitle": "Выплата {index}",
-  "@onboardingIncomePartTitle": {
-    "placeholders": {
-      "index": {"type": "int"}
-    }
-  },
+  "onboardingIncomeCalculationModeFixedHint": "Каждый месяц вы получаете полную сумму, даже если были в отпуске или на больничном.",
+  "onboardingIncomeCalculationModeByWorkingDaysHint": "Если отработано меньше дней, чем в периоде (отпуск, больничный, неполный месяц), сумма уменьшается пропорционально.",
+  "onboardingIncomePartAdvanceTitle": "Аванс",
+  "onboardingIncomePartMainTitle": "Основная часть",
   "onboardingIncomePartPaymentDayLabel": "День месяца",
   "onboardingIncomePartWeekendShiftLabel": "Если выпадает на выходной",
+  "onboardingIncomePartWeekendShiftHint": "Если день выплаты выше приходится на субботу или воскресенье, здесь выбирается — платить точно в эту дату или перенести на ближайший будний день.",
   "weekendShiftRuleNone": "Оставить дату",
   "weekendShiftRuleMoveToPreviousBusinessDay": "Перенести раньше",
   "weekendShiftRuleMoveToNextBusinessDay": "Перенести позже",
+  "onboardingIncomePartMonthLabel": "В каком месяце платится",
+  "paymentMonthOffsetSameMonth": "В этом месяце",
+  "paymentMonthOffsetNextMonth": "В следующем месяце",
+  "onboardingIncomePartMonthHint": "В некоторых схемах зарплата за период выплачивается в начале следующего месяца (например, зарплата за июнь выплачивается 7 июля).",
   "onboardingIncomePartAmountModeLabel": "Эта выплата — это",
   "paymentPartAmountModePercentage": "% от суммы",
   "paymentPartAmountModeFixed": "Фиксированная сумма",
   "onboardingIncomePartPercentageLabel": "Процент",
   "onboardingIncomePartFixedAmountLabel": "Сумма",
+  "onboardingIncomeMainPaymentAuto": "Основная часть: {value} (остаток, считается автоматически)",
+  "@onboardingIncomeMainPaymentAuto": {
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "onboardingIncomePartCoverageLabel": "Оплата за дни",
+  "onboardingIncomePartCoverageFromLabel": "С числа",
+  "onboardingIncomePartCoverageToLabel": "По число",
+  "onboardingIncomePartCoverageHint": "За какие дни платится именно эта часть — например, аванс за 1-15, основная часть за 16-30. Сумма считается по фактически отработанным дням именно в этом диапазоне.",
+  "onboardingIncomePartAmountDependsOnAttendance": "Точная сумма зависит от фактически отработанных дней в этом диапазоне — вы подтвердите её при поступлении выплаты.",
+  "onboardingIncomeRateFixingLabel": "Когда фиксируется курс",
+  "onboardingIncomeRateFixingHint": "Если обе выплаты относятся к зарплате за один месяц, курс обычно фиксируют один раз на весь месяц (например, на 1-е число), а не отдельно для каждой выплаты.",
+  "rateFixingModeOnPaymentDate": "На дату каждой выплаты",
+  "rateFixingModeSpecificDay": "На определённый день месяца",
+  "onboardingIncomeRateFixingDayLabel": "День месяца",
+  "onboardingIncomeFieldRequired": "Обязательное поле",
+  "onboardingIncomeFieldInvalidDay": "Введите число от 1 до 31",
+  "onboardingIncomeFieldInvalidNumber": "Введите число",
+  "onboardingIncomeCoverageRangeInvalid": "Должно быть не раньше числа «с»",
+  "onboardingIncomePreviewRateLabel": "Курс {from} → {to} (только для примера)",
+  "@onboardingIncomePreviewRateLabel": {
+    "placeholders": {
+      "from": {"type": "String"},
+      "to": {"type": "String"}
+    }
+  },
+  "onboardingIncomePreviewRateHint": "Не сохраняется — нужен только для примерного расчёта ниже.",
+  "onboardingIncomePartPreviewAmount": "≈ {value}",
+  "@onboardingIncomePartPreviewAmount": {
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "onboardingIncomePartPreviewMissingRate": "Укажите курс выше, чтобы увидеть сумму в {currency}",
+  "@onboardingIncomePartPreviewMissingRate": {
+    "placeholders": {
+      "currency": {"type": "String"}
+    }
+  },
   "onboardingIncomeDeductionLabel": "Удержание",
+  "onboardingIncomeDeductionHint": "Сумма, которая вычитается из дохода до того, как вы её получите — например, налог на доходы или другие обязательные отчисления. Если не уверены — оставьте «Нет».",
   "deductionRuleModeNone": "Нет",
   "deductionRuleModeFixed": "Фиксированная сумма",
   "deductionRuleModePercentage": "Процент",

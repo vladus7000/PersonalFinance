@@ -124,15 +124,18 @@ class DriftIncomeSourceRepository implements IncomeSourceRepository {
     return IncomeScheduleRule(
       id: row.id,
       partIndex: row.partIndex,
+      coverageStartDay: row.coverageStartDay,
+      coverageEndDay: row.coverageEndDay,
       paymentDay: row.paymentDay,
       paymentMonthOffset: row.paymentMonthOffset,
       amount: switch (row.amountType) {
         'percentage' => PaymentPartAmount.percentage(
           percentage: Percentage(Decimal.parse(row.amountPercentage!)),
         ),
-        _ => PaymentPartAmount.fixed(
+        'fixed' => PaymentPartAmount.fixed(
           amount: Money(Decimal.parse(row.amountFixedValue!), CurrencyCode(contractCurrency)),
         ),
+        _ => null,
       },
       weekendShiftRule: WeekendShiftRule.values.byName(row.weekendShiftRule),
       rateFixingDay: row.rateFixingDay,
@@ -179,12 +182,15 @@ class DriftIncomeSourceRepository implements IncomeSourceRepository {
     return IncomeScheduleRulesCompanion.insert(
       incomeSourceId: incomeSourceId,
       partIndex: rule.partIndex,
+      coverageStartDay: rule.coverageStartDay,
+      coverageEndDay: rule.coverageEndDay,
       paymentDay: rule.paymentDay,
       paymentMonthOffset: Value(rule.paymentMonthOffset),
-      amountType: switch (amount) {
+      amountType: Value(switch (amount) {
         PercentagePaymentPart() => 'percentage',
         FixedPaymentPart() => 'fixed',
-      },
+        null => null,
+      }),
       amountPercentage: Value(switch (amount) {
         PercentagePaymentPart(:final percentage) => percentage.value.toString(),
         _ => null,

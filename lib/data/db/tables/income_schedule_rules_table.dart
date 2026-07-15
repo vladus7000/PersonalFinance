@@ -14,6 +14,11 @@ class IncomeScheduleRules extends Table {
 
   IntColumn get partIndex => integer().named('part_index')();
 
+  /// See [IncomeScheduleRule.coverageStartDay]/`coverageEndDay`.
+  IntColumn get coverageStartDay => integer().named('coverage_start_day')();
+
+  IntColumn get coverageEndDay => integer().named('coverage_end_day')();
+
   IntColumn get paymentDay => integer().named('payment_day')();
 
   /// See [IncomeScheduleRule.paymentMonthOffset] — the payment can land in
@@ -21,8 +26,10 @@ class IncomeScheduleRules extends Table {
   IntColumn get paymentMonthOffset =>
       integer().named('payment_month_offset').withDefault(const Constant(0))();
 
-  /// `'percentage' | 'fixed'` — [PaymentPartAmount] discriminator.
-  TextColumn get amountType => text().named('amount_type')();
+  /// `'percentage' | 'fixed'` — [PaymentPartAmount] discriminator, or
+  /// `null` when `calculationMode == byWorkingDays` (see
+  /// [IncomeScheduleRule.amount]).
+  TextColumn get amountType => text().named('amount_type').nullable()();
 
   TextColumn get amountPercentage => text().named('amount_percentage').nullable()();
 

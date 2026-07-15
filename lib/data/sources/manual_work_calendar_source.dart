@@ -13,11 +13,16 @@ class ManualWorkCalendarSource implements WorkCalendarSource {
     required String countryCode,
     required int year,
     required int month,
+    int fromDay = 1,
+    int? toDay,
     Set<int> manualHolidayDays = const {},
   }) async {
     final daysInMonth = DateTime.utc(year, month + 1, 0).day;
+    final start = fromDay < 1 ? 1 : fromDay;
+    final end = (toDay == null || toDay > daysInMonth) ? daysInMonth : toDay;
+
     var count = 0;
-    for (var day = 1; day <= daysInMonth; day++) {
+    for (var day = start; day <= end; day++) {
       if (manualHolidayDays.contains(day)) continue;
       final weekday = DateTime.utc(year, month, day).weekday;
       if (weekday != DateTime.saturday && weekday != DateTime.sunday) count++;

@@ -21,27 +21,34 @@ import 'currency_converter.dart';
 ///
 /// Calculation pipeline for a single part (documented since doc.md does not
 /// specify composition order):
-/// 1. Gross amount: a `fixed` part is taken literally; a `percentage` part
-///    is that percentage of [IncomeSource.nominalAmount].
-/// 2. If [IncomeSource.calculationMode] is `byWorkingDays`, the gross
-///    amount is scaled by `workedDays / workingDays` (incomplete month).
-/// 3. [IncomeSource.deductionRule] is applied to this part: a `percentage`
-///    deduction applies directly to this part's (prorated) gross amount; a
+/// 1. Gross amount — two entirely different "mechanics" depending on
+///    [IncomeSource.calculationMode] (doc.md §8.18): with `fixed`, a
+///    `percentage`/`fixed` [IncomeScheduleRule.amount] splits the nominal
+///    amount between parts, independent of attendance. With
+///    `byWorkingDays`, `amount` is not used at all — the gross is a daily
+///    rate (`nominalAmount / workingDaysInMonth`) times the days actually
+///    worked within *this part's own* [IncomeScheduleRule.coverageStartDay]
+///    -`coverageEndDay` range (e.g. an advance covering the 1st-15th only
+///    pays for attendance in the 1st-15th, not a fixed slice of the whole
+///    month's proration).
+/// 2. [IncomeSource.deductionRule] is applied to this part: a `percentage`
+///    deduction applies directly to this part's gross amount; a
 ///    `fixedAmount` deduction is split across all of the source's active
-///    schedule rules proportionally to their own (prorated) gross amounts —
-///    otherwise calling `forecast` once per part would subtract the full
-///    fixed deduction from each part, over-deducting by a multiple of the
-///    part count.
-/// 4. The expected date is [IncomeScheduleRule.paymentDay] in
+///    schedule rules proportionally to their own gross amounts (assuming
+///    full attendance for siblings — only the part actually being forecast
+///    uses the caller-supplied attendance figure) — otherwise calling
+///    `forecast` once per part would subtract the full fixed deduction from
+///    each part, over-deducting by a multiple of the part count.
+/// 3. The expected date is [IncomeScheduleRule.paymentDay] in
 ///    [year]/`month + `[IncomeScheduleRule.paymentMonthOffset] (payroll
 ///    commonly pays a period in the month that follows it), adjusted by
 ///    [IncomeScheduleRule.weekendShiftRule].
-/// 5. The exchange rate is fixed on [IncomeScheduleRule.rateFixingDay] of
+/// 4. The exchange rate is fixed on [IncomeScheduleRule.rateFixingDay] of
 ///    the *forecasted period's* [year]/[month] — not the payment month —
 ///    so every part of the same period shares one rate even when paid in
 ///    different months; `null` means the rate is fixed on the expected
 ///    date itself.
-/// 6. The net contract-currency amount is converted to
+/// 5. The net contract-currency amount is converted to
 ///    [IncomeSource.payoutCurrency] via [CurrencyConverter]. Both returned
 ///    amounts are rounded to [roundingScale] fractional digits — the
 ///    stored [IncomeSource.nominalAmount] itself is never rounded.
@@ -57,17 +64,20 @@ class SalaryCalculator {
     required int year,
     required int month,
     required String countryCode,
-    int? actualWorkedDays,
+
+    /// Days actually worked within [rule]'s own coverage range — only
+    /// meaningful when `calculationMode == byWorkingDays`. `null` assumes
+    /// full attendance (every working day in the range was worked).
+    int? actualWorkedDaysInCoverage,
     Set<int> manualHolidayDays = const {},
     int roundingScale = 2,
   }) async {
-    final workingDays = await _workCalendarSource.workingDaysIn(
+    final workingDaysInMonth = await _workCalendarSource.workingDaysIn(
       countryCode: countryCode,
       year: year,
       month: month,
       manualHolidayDays: manualHolidayDays,
     );
-    final workedDays = actualWorkedDays ?? workingDays;
 
     final expectedDate = _resolvePaymentDate(
       year: year,
@@ -76,16 +86,25 @@ class SalaryCalculator {
       shiftRule: rule.weekendShiftRule,
     );
 
-    var partAmount = _grossFor(source.nominalAmount, rule.amount);
-    if (source.calculationMode == IncomeCalculationMode.byWorkingDays) {
-      partAmount = _prorate(partAmount, workedDays: workedDays, workingDays: workingDays);
-    }
+    final partAmount = await _grossForRule(
+      rule: rule,
+      source: source,
+      workingDaysInMonth: workingDaysInMonth,
+      actualWorkedDaysInCoverage: actualWorkedDaysInCoverage,
+      countryCode: countryCode,
+      year: year,
+      month: month,
+      manualHolidayDays: manualHolidayDays,
+    );
 
-    final deduction = _deductionFor(
+    final deduction = await _deductionFor(
       source: source,
       partAmount: partAmount,
-      workedDays: workedDays,
-      workingDays: workingDays,
+      workingDaysInMonth: workingDaysInMonth,
+      countryCode: countryCode,
+      year: year,
+      month: month,
+      manualHolidayDays: manualHolidayDays,
     );
     final netResult = partAmount.subtract(deduction);
     final partNet = netResult.valueOrNull;
@@ -124,7 +143,7 @@ class SalaryCalculator {
             amountPayout: Money(money.amount.round(scale: roundingScale), money.currency),
             rate: rate,
             rateSource: rateSource,
-            workingDays: workingDays,
+            workingDays: workingDaysInMonth,
             partIndex: rule.partIndex,
             isRateStale: isStale,
           ),
@@ -132,63 +151,109 @@ class SalaryCalculator {
       MissingRateOutcome() => SalaryForecastOutcome.rateMissing(
         expectedDate: expectedDate,
         amountContract: roundedContract,
-        workingDays: workingDays,
+        workingDays: workingDaysInMonth,
         partIndex: rule.partIndex,
       ),
     };
   }
 
-  Money _grossFor(Money nominal, PaymentPartAmount amount) => switch (amount) {
-    FixedPaymentPart(:final amount) => amount,
-    PercentagePaymentPart(:final percentage) => percentage.of(nominal),
-  };
-
-  Money _prorate(Money gross, {required int workedDays, required int workingDays}) {
-    if (workingDays <= 0) {
-      throw ArgumentError('workingDays must be > 0 to prorate a byWorkingDays income source');
+  /// This part's gross contract-currency amount — see class doc point 1 for
+  /// why `fixed` and `byWorkingDays` compute this completely differently.
+  Future<Money> _grossForRule({
+    required IncomeScheduleRule rule,
+    required IncomeSource source,
+    required int workingDaysInMonth,
+    int? actualWorkedDaysInCoverage,
+    required String countryCode,
+    required int year,
+    required int month,
+    required Set<int> manualHolidayDays,
+  }) async {
+    if (source.calculationMode == IncomeCalculationMode.fixed) {
+      final amount = rule.amount;
+      if (amount == null) {
+        throw ArgumentError(
+          'IncomeScheduleRule.amount is required when calculationMode is fixed',
+        );
+      }
+      return switch (amount) {
+        FixedPaymentPart(:final amount) => amount,
+        PercentagePaymentPart(:final percentage) => percentage.of(source.nominalAmount),
+      };
     }
-    final fraction = (Decimal.fromInt(workedDays) / Decimal.fromInt(workingDays)).toDecimal(
+
+    if (workingDaysInMonth <= 0) {
+      throw ArgumentError(
+        'workingDaysInMonth must be > 0 to prorate a byWorkingDays income source',
+      );
+    }
+    final workingDaysInCoverage = await _workCalendarSource.workingDaysIn(
+      countryCode: countryCode,
+      year: year,
+      month: month,
+      fromDay: rule.coverageStartDay,
+      toDay: rule.coverageEndDay,
+      manualHolidayDays: manualHolidayDays,
+    );
+    final workedDays = actualWorkedDaysInCoverage ?? workingDaysInCoverage;
+    final fraction = (Decimal.fromInt(workedDays) / Decimal.fromInt(workingDaysInMonth)).toDecimal(
       scaleOnInfinitePrecision: 10,
     );
-    return gross.multiply(fraction);
+    return source.nominalAmount.multiply(fraction);
   }
 
-  Money _deductionFor({
+  Future<Money> _deductionFor({
     required IncomeSource source,
     required Money partAmount,
-    required int workedDays,
-    required int workingDays,
-  }) {
+    required int workingDaysInMonth,
+    required String countryCode,
+    required int year,
+    required int month,
+    required Set<int> manualHolidayDays,
+  }) async {
     final rule = source.deductionRule;
     return switch (rule) {
       NoDeduction() => Money.zero(partAmount.currency),
       PercentageDeduction(:final percentage) => percentage.of(partAmount),
-      FixedDeduction(:final amount) => _proportionalShare(
+      FixedDeduction(:final amount) => await _proportionalShare(
         totalDeduction: amount,
         partAmount: partAmount,
         source: source,
-        workedDays: workedDays,
-        workingDays: workingDays,
+        workingDaysInMonth: workingDaysInMonth,
+        countryCode: countryCode,
+        year: year,
+        month: month,
+        manualHolidayDays: manualHolidayDays,
       ),
     };
   }
 
   /// This part's share of a source-wide fixed deduction, proportional to
-  /// its (prorated) gross amount among all active schedule rules — see
-  /// class doc point 3.
-  Money _proportionalShare({
+  /// its gross amount among all active schedule rules — see class doc
+  /// point 2. Sibling rules (every active rule except the one actually
+  /// being forecast) assume full attendance — only the caller's
+  /// `actualWorkedDaysInCoverage` applies to the part being forecast.
+  Future<Money> _proportionalShare({
     required Money totalDeduction,
     required Money partAmount,
     required IncomeSource source,
-    required int workedDays,
-    required int workingDays,
-  }) {
+    required int workingDaysInMonth,
+    required String countryCode,
+    required int year,
+    required int month,
+    required Set<int> manualHolidayDays,
+  }) async {
     var totalGross = Decimal.zero;
-    for (final rule in source.scheduleRules.where((r) => r.isActive)) {
-      var gross = _grossFor(source.nominalAmount, rule.amount);
-      if (source.calculationMode == IncomeCalculationMode.byWorkingDays) {
-        gross = _prorate(gross, workedDays: workedDays, workingDays: workingDays);
-      }
+    for (final siblingRule in source.scheduleRules.where((r) => r.isActive)) {
+      final gross = await _grossForRule(
+        rule: siblingRule,
+        source: source,
+        workingDaysInMonth: workingDaysInMonth,
+        countryCode: countryCode,
+        year: year,
+        month: month,
+        manualHolidayDays: manualHolidayDays,
+      );
       totalGross += gross.amount;
     }
     if (totalGross == Decimal.zero) return Money.zero(partAmount.currency);

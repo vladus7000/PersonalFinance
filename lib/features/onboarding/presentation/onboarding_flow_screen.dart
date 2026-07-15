@@ -61,9 +61,13 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
                 for (var i = 0; i < incomeCalculation.parts.length; i++)
                   IncomeScheduleRule(
                     partIndex: i,
+                    coverageStartDay: incomeCalculation.parts[i].coverageStartDay,
+                    coverageEndDay: incomeCalculation.parts[i].coverageEndDay,
                     paymentDay: incomeCalculation.parts[i].paymentDay,
+                    paymentMonthOffset: incomeCalculation.parts[i].paymentMonthOffset,
                     amount: incomeCalculation.parts[i].amount,
                     weekendShiftRule: incomeCalculation.parts[i].weekendShiftRule,
+                    rateFixingDay: incomeCalculation.rateFixingDay,
                     isActive: true,
                   ),
               ],

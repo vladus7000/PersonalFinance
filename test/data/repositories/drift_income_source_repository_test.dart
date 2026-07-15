@@ -42,6 +42,8 @@ void main() {
     scheduleRules: [
       IncomeScheduleRule(
         partIndex: 0,
+        coverageStartDay: 1,
+        coverageEndDay: 15,
         paymentDay: 15,
         amount: PaymentPartAmount.percentage(percentage: Percentage(Decimal.fromInt(50))),
         weekendShiftRule: WeekendShiftRule.moveToPreviousBusinessDay,
@@ -49,6 +51,8 @@ void main() {
       ),
       IncomeScheduleRule(
         partIndex: 1,
+        coverageStartDay: 16,
+        coverageEndDay: 30,
         paymentDay: 30,
         amount: PaymentPartAmount.fixed(amount: Money(Decimal.fromInt(2750), usd)),
         weekendShiftRule: WeekendShiftRule.moveToNextBusinessDay,
@@ -102,6 +106,8 @@ void main() {
         scheduleRules: [
           IncomeScheduleRule(
             partIndex: 0,
+            coverageStartDay: 1,
+            coverageEndDay: 31,
             paymentDay: 20,
             amount: PaymentPartAmount.fixed(amount: Money(Decimal.fromInt(5500), usd)),
             weekendShiftRule: WeekendShiftRule.none,

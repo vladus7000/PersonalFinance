@@ -16,6 +16,15 @@ sealed class IncomeScheduleRule with _$IncomeScheduleRule {
   const factory IncomeScheduleRule({
     int? id,
     required int partIndex,
+
+    /// The 1-based day-of-month range within the forecasted period this
+    /// part compensates for (e.g. an advance covering the 1st-15th, a main
+    /// payment covering the 16th-30th) — doc.md §8.18. Only affects the
+    /// calculation when [IncomeSource.calculationMode] is `byWorkingDays`
+    /// (see [amount] doc); still recorded for `fixed` sources for clarity,
+    /// but ignored by `SalaryCalculator` there.
+    required int coverageStartDay,
+    required int coverageEndDay,
     required int paymentDay,
 
     /// The payment lands in `forecast()`'s `(year, month + paymentMonthOffset)`
@@ -23,7 +32,15 @@ sealed class IncomeScheduleRule with _$IncomeScheduleRule {
     /// forecast — real payroll commonly pays a period's salary early in the
     /// *following* month (e.g. June's salary paid July 7).
     @Default(0) int paymentMonthOffset,
-    required PaymentPartAmount amount,
+
+    /// This part's share of [IncomeSource.nominalAmount] — **only used when
+    /// `calculationMode == fixed`**. When `calculationMode == byWorkingDays`,
+    /// this is `null` and ignored: the amount is instead a daily rate
+    /// (`nominalAmount / workingDaysInMonth`) times the days actually worked
+    /// within [coverageStartDay]-[coverageEndDay], so a percentage/fixed
+    /// split would double-apply the proration doc.md §8.18 already
+    /// establishes per-part.
+    PaymentPartAmount? amount,
     required WeekendShiftRule weekendShiftRule,
 
     /// Day of the forecasted period's month (`forecast()`'s `(year, month)`,

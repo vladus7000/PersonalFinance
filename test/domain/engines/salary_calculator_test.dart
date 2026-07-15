@@ -73,6 +73,8 @@ void main() {
 
   IncomeScheduleRule fixedRule({
     int partIndex = 0,
+    int coverageStartDay = 1,
+    int coverageEndDay = 31,
     required int paymentDay,
     int paymentMonthOffset = 0,
     required Decimal amount,
@@ -80,6 +82,8 @@ void main() {
     int? rateFixingDay,
   }) => IncomeScheduleRule(
     partIndex: partIndex,
+    coverageStartDay: coverageStartDay,
+    coverageEndDay: coverageEndDay,
     paymentDay: paymentDay,
     paymentMonthOffset: paymentMonthOffset,
     amount: PaymentPartAmount.fixed(amount: Money(amount, usd)),
@@ -90,6 +94,8 @@ void main() {
 
   IncomeScheduleRule percentRule({
     int partIndex = 0,
+    int coverageStartDay = 1,
+    int coverageEndDay = 31,
     required int paymentDay,
     int paymentMonthOffset = 0,
     required Decimal percentage,
@@ -97,9 +103,34 @@ void main() {
     int? rateFixingDay,
   }) => IncomeScheduleRule(
     partIndex: partIndex,
+    coverageStartDay: coverageStartDay,
+    coverageEndDay: coverageEndDay,
     paymentDay: paymentDay,
     paymentMonthOffset: paymentMonthOffset,
     amount: PaymentPartAmount.percentage(percentage: Percentage(percentage)),
+    weekendShiftRule: weekendShiftRule,
+    rateFixingDay: rateFixingDay,
+    isActive: true,
+  );
+
+  /// A `byWorkingDays`-mode part: no percentage/fixed amount at all — the
+  /// gross is a daily rate times attendance within [coverageStartDay]-
+  /// [coverageEndDay] (see `SalaryCalculator` doc).
+  IncomeScheduleRule byWorkingDaysRule({
+    int partIndex = 0,
+    required int coverageStartDay,
+    required int coverageEndDay,
+    required int paymentDay,
+    int paymentMonthOffset = 0,
+    WeekendShiftRule weekendShiftRule = WeekendShiftRule.none,
+    int? rateFixingDay,
+  }) => IncomeScheduleRule(
+    partIndex: partIndex,
+    coverageStartDay: coverageStartDay,
+    coverageEndDay: coverageEndDay,
+    paymentDay: paymentDay,
+    paymentMonthOffset: paymentMonthOffset,
+    amount: null,
     weekendShiftRule: weekendShiftRule,
     rateFixingDay: rateFixingDay,
     isActive: true,
@@ -123,7 +154,7 @@ void main() {
       year: 2026,
       month: 7,
       countryCode: 'UA',
-      actualWorkedDays: 5, // irrelevant in fixed mode
+      actualWorkedDaysInCoverage: 5, // irrelevant in fixed mode
     );
 
     final forecast = forecastOf(outcome).forecast;
@@ -134,8 +165,8 @@ void main() {
     expect(forecast.isRateStale, isFalse);
   });
 
-  test('by working days: an incomplete month prorates the amount', () async {
-    final rule = percentRule(paymentDay: 30, percentage: Decimal.fromInt(100));
+  test('by working days: a single payment covering the whole month prorates by attendance', () async {
+    final rule = byWorkingDaysRule(coverageStartDay: 1, coverageEndDay: 31, paymentDay: 30);
     final source = buildSource(
       calculationMode: IncomeCalculationMode.byWorkingDays,
       scheduleRules: [rule],
@@ -148,7 +179,7 @@ void main() {
       year: 2026,
       month: 7,
       countryCode: 'UA',
-      actualWorkedDays: 15,
+      actualWorkedDaysInCoverage: 15,
     );
 
     final forecast = forecastOf(outcome).forecast;
@@ -158,6 +189,103 @@ void main() {
         .round(scale: 2);
     expect(forecast.amountContract, Money(expected, usd));
   });
+
+  test(
+    'by working days, two parts: each part is prorated by attendance in its OWN coverage range',
+    () async {
+      // The user's real concern: an advance covering the 1st-15th and a
+      // main payment covering the 16th-31st must be prorated independently
+      // — being fully present for the first half but sick for half of the
+      // second half must NOT average out across the whole month.
+      final advance = byWorkingDaysRule(
+        partIndex: 0,
+        coverageStartDay: 1,
+        coverageEndDay: 15,
+        paymentDay: 15,
+      );
+      final main = byWorkingDaysRule(
+        partIndex: 1,
+        coverageStartDay: 16,
+        coverageEndDay: 31,
+        paymentDay: 31,
+      );
+      final source = buildSource(
+        calculationMode: IncomeCalculationMode.byWorkingDays,
+        scheduleRules: [advance, main],
+      );
+
+      // July 2026: 23 working days total; 1st-15th has 11 working days,
+      // 16th-31st has 12 working days (verified via the calendar directly).
+      final advanceForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: advance,
+          year: 2026,
+          month: 7,
+          countryCode: 'UA',
+          actualWorkedDaysInCoverage: 11, // fully present in the first half
+        ),
+      ).forecast;
+      final mainForecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: main,
+          year: 2026,
+          month: 7,
+          countryCode: 'UA',
+          actualWorkedDaysInCoverage: 6, // only half the second half worked
+        ),
+      ).forecast;
+
+      final advanceFraction = (Decimal.fromInt(11) / Decimal.fromInt(23)).toDecimal(
+        scaleOnInfinitePrecision: 10,
+      );
+      final mainFraction = (Decimal.fromInt(6) / Decimal.fromInt(23)).toDecimal(
+        scaleOnInfinitePrecision: 10,
+      );
+      final expectedAdvance = (Decimal.fromInt(5500) * advanceFraction).round(scale: 2);
+      final expectedMain = (Decimal.fromInt(5500) * mainFraction).round(scale: 2);
+
+      expect(advanceForecast.amountContract, Money(expectedAdvance, usd));
+      expect(mainForecast.amountContract, Money(expectedMain, usd));
+      // Both report the same whole-month denominator.
+      expect(advanceForecast.workingDays, 23);
+      expect(mainForecast.workingDays, 23);
+    },
+  );
+
+  test(
+    'by working days: omitting attendance assumes full attendance in that part\'s range',
+    () async {
+      final advance = byWorkingDaysRule(
+        partIndex: 0,
+        coverageStartDay: 1,
+        coverageEndDay: 15,
+        paymentDay: 15,
+      );
+      final source = buildSource(
+        calculationMode: IncomeCalculationMode.byWorkingDays,
+        scheduleRules: [advance],
+      );
+
+      final forecast = forecastOf(
+        await calculator.forecast(
+          source: source,
+          rule: advance,
+          year: 2026,
+          month: 7,
+          countryCode: 'UA',
+          // actualWorkedDaysInCoverage omitted.
+        ),
+      ).forecast;
+
+      // 11 working days in July 1st-15th, out of 23 in the whole month.
+      final expected = (Decimal.fromInt(5500) * Decimal.fromInt(11) / Decimal.fromInt(23))
+          .toDecimal(scaleOnInfinitePrecision: 10)
+          .round(scale: 2);
+      expect(forecast.amountContract, Money(expected, usd));
+    },
+  );
 
   test('two parts (advance % + main fixed) forecast independently by partIndex', () async {
     final advance = percentRule(partIndex: 0, paymentDay: 15, percentage: Decimal.fromInt(50));
