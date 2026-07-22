@@ -6,7 +6,6 @@ import '../../../core/l10n/gen/app_localizations.dart';
 import '../../../core/money/money.dart';
 import '../../../core/money/percentage.dart';
 import '../../../domain/entities/deduction_rule.dart';
-import '../../../domain/entities/income_calculation_mode.dart';
 import '../../../domain/entities/payment_part_amount.dart';
 import '../../../domain/entities/weekend_shift_rule.dart';
 import '../application/income_calculation_step_data.dart';
@@ -14,7 +13,7 @@ import '../application/income_step_data.dart';
 import '../application/onboarding_controller.dart';
 import '../application/onboarding_step_ids.dart';
 
-enum _AmountMode { percentage, fixed }
+enum _AmountMode { percentage, byWorkingDays }
 
 enum _DeductionMode { none, fixed, percentage }
 
@@ -23,35 +22,34 @@ enum _RateFixingMode { onPaymentDate, specificDay }
 class _PartFormState {
   final dayController = TextEditingController();
   WeekendShiftRule weekendShiftRule = WeekendShiftRule.none;
-  int paymentMonthOffset = 0;
-  final coverageStartController = TextEditingController();
-  final coverageEndController = TextEditingController();
 
-  void dispose() {
-    dayController.dispose();
-    coverageStartController.dispose();
-    coverageEndController.dispose();
-  }
+  void dispose() => dayController.dispose();
 }
 
-/// Onboarding step 3 (doc.md §3.3, §8.18): [IncomeCalculationStepData] — how
+/// Onboarding step 3 (doc.md §3.3, §8.20): [IncomeCalculationStepData] — how
 /// many parts to render is fixed by [IncomeStepData.payoutsPerMonth] (set
 /// in the previous step).
 ///
-/// `calculationMode` selects between two entirely different "mechanics"
-/// (see `SalaryCalculator` doc): `fixed` splits the nominal amount between
-/// parts by percentage/fixed value, independent of attendance — a
-/// single-part source implies the full amount, so it never asks for a
-/// value at all. `byWorkingDays` does NOT use a percentage/fixed split;
-/// instead each part is paid for attendance within its own
-/// [IncomePartInput.coverageStartDay]-`coverageEndDay` range (e.g. an
-/// advance covering the 1st-15th, a main payment covering the 16th-30th),
-/// so that range is asked for instead — the actual amount depends on
-/// attendance and isn't known until the payment is confirmed later.
+/// A single-part source never asks about the amount at all — it's
+/// implicitly the full nominal amount. A two-part source (advance + main
+/// payment) only asks the *advance* how it's computed: either a percentage
+/// of the nominal amount, or "by working days" (a daily rate times working
+/// days in a date range the user picks — never asking for actual
+/// attendance, always assuming the full range was worked, per the
+/// 2026-07-22 simplification: this app is not for logging sick days). The
+/// main payment always mirrors the advance's choice automatically — a
+/// percentage advance leaves main "the rest"; a by-working-days advance
+/// leaves main the rest of the month's date range — so there is exactly
+/// one decision to make for a two-part source, not two.
+///
+/// Neither part asks which calendar month it's paid in: the advance
+/// defaults to the same month as the period, the main payment to the
+/// following month (doc.md §8.18/§8.20) — editable later via a dedicated
+/// income source editor once one exists, not during onboarding.
 ///
 /// When the payout currency differs from the contract currency, an
 /// optional, never-persisted "preview rate" lets the user see roughly how
-/// much a `fixed`-mode part converts to.
+/// much a percentage-mode part converts to.
 class IncomeCalculationStepScreen extends ConsumerStatefulWidget {
   const IncomeCalculationStepScreen({super.key});
 
@@ -61,11 +59,11 @@ class IncomeCalculationStepScreen extends ConsumerStatefulWidget {
 }
 
 class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationStepScreen> {
-  IncomeCalculationMode _mode = IncomeCalculationMode.fixed;
   late final List<_PartFormState> _parts;
   _AmountMode _advanceAmountMode = _AmountMode.percentage;
   final _advancePercentageController = TextEditingController();
-  final _advanceFixedController = TextEditingController();
+  final _advanceCoverageStartController = TextEditingController();
+  final _advanceCoverageEndController = TextEditingController();
   _RateFixingMode _rateFixingMode = _RateFixingMode.onPaymentDate;
   final _rateFixingDayController = TextEditingController();
   final _previewRateController = TextEditingController();
@@ -90,7 +88,6 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             as IncomeCalculationStepData?;
     if (existing == null) return;
 
-    _mode = existing.calculationMode;
     if (existing.rateFixingDay != null) {
       _rateFixingMode = _RateFixingMode.specificDay;
       _rateFixingDayController.text = existing.rateFixingDay.toString();
@@ -106,23 +103,21 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
         _deductionPercentController.text = percentage.value.toString();
     }
     for (var i = 0; i < _parts.length && i < existing.parts.length; i++) {
-      final existingPart = existing.parts[i];
-      _parts[i].dayController.text = existingPart.paymentDay.toString();
-      _parts[i].weekendShiftRule = existingPart.weekendShiftRule;
-      _parts[i].paymentMonthOffset = existingPart.paymentMonthOffset;
-      _parts[i].coverageStartController.text = existingPart.coverageStartDay.toString();
-      _parts[i].coverageEndController.text = existingPart.coverageEndDay.toString();
+      _parts[i].dayController.text = existing.parts[i].paymentDay.toString();
+      _parts[i].weekendShiftRule = existing.parts[i].weekendShiftRule;
     }
     if (_hasTwoParts && existing.parts.isNotEmpty) {
       switch (existing.parts.first.amount) {
         case PercentagePaymentPart(:final percentage):
           _advanceAmountMode = _AmountMode.percentage;
           _advancePercentageController.text = percentage.value.toString();
-        case FixedPaymentPart(:final amount):
-          _advanceAmountMode = _AmountMode.fixed;
-          _advanceFixedController.text = amount.amount.toString();
+        case FixedPaymentPart():
+          // No longer offered by this screen, but tolerate old saved data.
+          _advanceAmountMode = _AmountMode.percentage;
         case null:
-          break;
+          _advanceAmountMode = _AmountMode.byWorkingDays;
+          _advanceCoverageStartController.text = existing.parts.first.coverageStartDay.toString();
+          _advanceCoverageEndController.text = existing.parts.first.coverageEndDay.toString();
       }
     }
   }
@@ -133,7 +128,8 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
       part.dispose();
     }
     _advancePercentageController.dispose();
-    _advanceFixedController.dispose();
+    _advanceCoverageStartController.dispose();
+    _advanceCoverageEndController.dispose();
     _rateFixingDayController.dispose();
     _previewRateController.dispose();
     _deductionAmountController.dispose();
@@ -145,36 +141,6 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     ref
         .read(onboardingControllerProvider.notifier)
         .setStepData(OnboardingStepIds.incomeCalculation, null, completed: false);
-  }
-
-  /// The advance's amount, and (for a two-part source) the main payment's
-  /// amount — always "the rest" of the nominal amount, so the two parts
-  /// are guaranteed to add up. Only meaningful in `fixed` mode. Returns
-  /// `null` if the advance amount hasn't been entered (or doesn't parse).
-  (PaymentPartAmount advance, PaymentPartAmount? mainPayment)? _resolveFixedAmounts(
-    Money nominalAmount,
-  ) {
-    if (!_hasTwoParts) return (PaymentPartAmount.fixed(amount: nominalAmount), null);
-
-    if (_advanceAmountMode == _AmountMode.percentage) {
-      final percentage = Decimal.tryParse(_advancePercentageController.text);
-      if (percentage == null) return null;
-      return (
-        PaymentPartAmount.percentage(percentage: Percentage(percentage)),
-        PaymentPartAmount.percentage(
-          percentage: Percentage(Decimal.fromInt(100) - percentage),
-        ),
-      );
-    }
-
-    final value = Decimal.tryParse(_advanceFixedController.text);
-    if (value == null) return null;
-    return (
-      PaymentPartAmount.fixed(amount: Money(value, nominalAmount.currency)),
-      PaymentPartAmount.fixed(
-        amount: Money(nominalAmount.amount - value, nominalAmount.currency),
-      ),
-    );
   }
 
   void _apply() {
@@ -189,38 +155,70 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
       }
     }
 
-    List<PaymentPartAmount?>? fixedAmounts;
-    if (_mode == IncomeCalculationMode.fixed) {
-      final resolved = _resolveFixedAmounts(incomeData.nominalAmount);
-      if (resolved == null) return _markIncomplete();
-      fixedAmounts = [resolved.$1, if (_hasTwoParts) resolved.$2];
-    }
-
     final parts = <IncomePartInput>[];
-    for (var i = 0; i < _parts.length; i++) {
-      final part = _parts[i];
-      final day = int.tryParse(part.dayController.text);
-      if (day == null || day < 1 || day > 31) return _markIncomplete();
 
-      var coverageStart = 1;
-      var coverageEnd = 31;
-      if (_hasTwoParts && _mode == IncomeCalculationMode.byWorkingDays) {
-        final start = int.tryParse(part.coverageStartController.text);
-        final end = int.tryParse(part.coverageEndController.text);
+    if (!_hasTwoParts) {
+      final day = int.tryParse(_parts[0].dayController.text);
+      if (day == null || day < 1 || day > 31) return _markIncomplete();
+      parts.add(
+        IncomePartInput(
+          coverageStartDay: 1,
+          coverageEndDay: 31,
+          paymentDay: day,
+          weekendShiftRule: _parts[0].weekendShiftRule,
+          amount: PaymentPartAmount.fixed(amount: incomeData.nominalAmount),
+        ),
+      );
+    } else {
+      final advanceDay = int.tryParse(_parts[0].dayController.text);
+      if (advanceDay == null || advanceDay < 1 || advanceDay > 31) return _markIncomplete();
+      final mainDay = int.tryParse(_parts[1].dayController.text);
+      if (mainDay == null || mainDay < 1 || mainDay > 31) return _markIncomplete();
+
+      PaymentPartAmount? advanceAmount;
+      PaymentPartAmount? mainAmount;
+      var advanceCoverageStart = 1;
+      var advanceCoverageEnd = 31;
+      var mainCoverageStart = 1;
+      var mainCoverageEnd = 31;
+
+      if (_advanceAmountMode == _AmountMode.percentage) {
+        final percentage = Decimal.tryParse(_advancePercentageController.text);
+        if (percentage == null) return _markIncomplete();
+        advanceAmount = PaymentPartAmount.percentage(percentage: Percentage(percentage));
+        mainAmount = PaymentPartAmount.percentage(
+          percentage: Percentage(Decimal.fromInt(100) - percentage),
+        );
+      } else {
+        final start = int.tryParse(_advanceCoverageStartController.text);
+        final end = int.tryParse(_advanceCoverageEndController.text);
         if (start == null || start < 1 || start > 31) return _markIncomplete();
-        if (end == null || end < 1 || end > 31 || end < start) return _markIncomplete();
-        coverageStart = start;
-        coverageEnd = end;
+        if (end == null || end < 1 || end > 31 || end < start || end >= 31) {
+          return _markIncomplete();
+        }
+        advanceCoverageStart = start;
+        advanceCoverageEnd = end;
+        mainCoverageStart = end + 1;
+        mainCoverageEnd = 31;
       }
 
       parts.add(
         IncomePartInput(
-          coverageStartDay: coverageStart,
-          coverageEndDay: coverageEnd,
-          paymentDay: day,
-          paymentMonthOffset: part.paymentMonthOffset,
-          weekendShiftRule: part.weekendShiftRule,
-          amount: _mode == IncomeCalculationMode.fixed ? fixedAmounts![i] : null,
+          coverageStartDay: advanceCoverageStart,
+          coverageEndDay: advanceCoverageEnd,
+          paymentDay: advanceDay,
+          weekendShiftRule: _parts[0].weekendShiftRule,
+          amount: advanceAmount,
+        ),
+      );
+      parts.add(
+        IncomePartInput(
+          coverageStartDay: mainCoverageStart,
+          coverageEndDay: mainCoverageEnd,
+          paymentDay: mainDay,
+          paymentMonthOffset: 1,
+          weekendShiftRule: _parts[1].weekendShiftRule,
+          amount: mainAmount,
         ),
       );
     }
@@ -246,7 +244,6 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
         .setStepData(
           OnboardingStepIds.incomeCalculation,
           IncomeCalculationStepData(
-            calculationMode: _mode,
             parts: parts,
             deductionRule: deductionRule,
             rateFixingDay: rateFixingDay,
@@ -274,7 +271,11 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     return null;
   }
 
-  String? _coverageEndError(AppLocalizations l10n, String startText, String endText) {
+  /// The advance's coverage-end field must also leave at least one day of
+  /// the month for the main payment's automatically-derived range.
+  String? _advanceCoverageEndError(AppLocalizations l10n) {
+    final startText = _advanceCoverageStartController.text;
+    final endText = _advanceCoverageEndController.text;
     final dayError = _dayFieldError(l10n, endText);
     if (dayError != null) return dayError;
     final start = int.tryParse(startText);
@@ -282,27 +283,106 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     if (start != null && end != null && end < start) {
       return l10n.onboardingIncomeCoverageRangeInvalid;
     }
+    if (end != null && end >= 31) return l10n.onboardingIncomePartCoverageEndTooLate;
     return null;
   }
 
-  /// A human-readable preview of the main payment's auto-computed amount,
-  /// e.g. "50%" or "2 750.00 USD" — shown read-only so the user can see
-  /// what "the rest" resolves to instead of it being a black box.
-  /// `fixed` mode only.
-  String? _mainPaymentPreview(IncomeStepData incomeData) {
-    final amounts = _resolveFixedAmounts(incomeData.nominalAmount);
-    if (amounts == null) return null;
-    return switch (amounts.$2) {
-      PercentagePaymentPart(:final percentage) => '${percentage.value}%',
-      FixedPaymentPart(:final amount) => amount.toCanonicalString(),
-      null => null,
-    };
+  Widget _buildAdvanceAmountSection(BuildContext context, AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(l10n.onboardingIncomePartAmountModeLabel, style: Theme.of(context).textTheme.labelLarge),
+        SegmentedButton<_AmountMode>(
+          segments: [
+            ButtonSegment(
+              value: _AmountMode.percentage,
+              label: Text(l10n.paymentPartAmountModePercentage),
+            ),
+            ButtonSegment(
+              value: _AmountMode.byWorkingDays,
+              label: Text(l10n.paymentPartAmountModeByWorkingDays),
+            ),
+          ],
+          selected: {_advanceAmountMode},
+          onSelectionChanged: (selection) {
+            setState(() {
+              _advanceAmountMode = selection.first;
+              _apply();
+            });
+          },
+        ),
+        const SizedBox(height: 8),
+        if (_advanceAmountMode == _AmountMode.percentage)
+          TextField(
+            controller: _advancePercentageController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: l10n.onboardingIncomePartPercentageLabel,
+              errorText: _numberFieldError(l10n, _advancePercentageController.text),
+            ),
+            onChanged: (_) => setState(_apply),
+          )
+        else ...[
+          Text(
+            l10n.onboardingIncomePartCoverageLabel,
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _advanceCoverageStartController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l10n.onboardingIncomePartCoverageFromLabel,
+                    errorText: _dayFieldError(l10n, _advanceCoverageStartController.text),
+                  ),
+                  onChanged: (_) => setState(_apply),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: _advanceCoverageEndController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l10n.onboardingIncomePartCoverageToLabel,
+                    errorText: _advanceCoverageEndError(l10n),
+                  ),
+                  onChanged: (_) => setState(_apply),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            l10n.onboardingIncomePartCoverageHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
   }
 
-  /// A rough, never-persisted conversion of [amount] (in the contract
-  /// currency) to the payout currency, using whatever the user typed into
-  /// [_previewRateController] — `fixed` mode only (no proration/deduction
-  /// applied), unlike the real forecast (E3.T4).
+  /// A human-readable preview of the main payment's auto-computed share —
+  /// either "60%" or "for the 16-31" depending on the advance's mode.
+  String _mainPaymentPreview(AppLocalizations l10n) {
+    if (_advanceAmountMode == _AmountMode.percentage) {
+      final percentage = Decimal.tryParse(_advancePercentageController.text);
+      return l10n.onboardingIncomeMainPaymentAuto(
+        percentage == null ? '—' : '${Decimal.fromInt(100) - percentage}%',
+      );
+    }
+    final end = int.tryParse(_advanceCoverageEndController.text);
+    if (end == null || end >= 31) {
+      return l10n.onboardingIncomeMainPaymentAutoCoverage(0, 0);
+    }
+    return l10n.onboardingIncomeMainPaymentAutoCoverage(end + 1, 31);
+  }
+
+  /// A rough, never-persisted conversion of a percentage-mode part's amount
+  /// (in the contract currency) to the payout currency, using whatever the
+  /// user typed into [_previewRateController].
   Widget _buildAmountPreview(
     BuildContext context,
     AppLocalizations l10n,
@@ -332,11 +412,6 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
   Widget _buildPart(BuildContext context, AppLocalizations l10n, int index, IncomeStepData incomeData) {
     final part = _parts[index];
     final isAdvance = index == 0;
-    final byWorkingDays = _mode == IncomeCalculationMode.byWorkingDays;
-    final amounts = _mode == IncomeCalculationMode.fixed
-        ? _resolveFixedAmounts(incomeData.nominalAmount)
-        : null;
-    final partAmount = amounts == null ? null : (isAdvance ? amounts.$1 : amounts.$2);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -397,132 +472,38 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             l10n.onboardingIncomePartWeekendShiftHint,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (_hasTwoParts) ...[
+          if (_hasTwoParts && isAdvance) _buildAdvanceAmountSection(context, l10n),
+          if (_hasTwoParts && !isAdvance) ...[
             const SizedBox(height: 12),
-            Text(
-              l10n.onboardingIncomePartMonthLabel,
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            SegmentedButton<int>(
-              segments: [
-                ButtonSegment(value: 0, label: Text(l10n.paymentMonthOffsetSameMonth)),
-                ButtonSegment(value: 1, label: Text(l10n.paymentMonthOffsetNextMonth)),
-              ],
-              selected: {part.paymentMonthOffset},
-              onSelectionChanged: (selection) {
-                setState(() {
-                  part.paymentMonthOffset = selection.first;
-                  _apply();
-                });
-              },
-            ),
-            Text(
-              l10n.onboardingIncomePartMonthHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(_mainPaymentPreview(l10n), style: Theme.of(context).textTheme.bodyMedium),
           ],
-          if (_hasTwoParts && byWorkingDays) ...[
-            const SizedBox(height: 12),
-            Text(
-              l10n.onboardingIncomePartCoverageLabel,
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: part.coverageStartController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: l10n.onboardingIncomePartCoverageFromLabel,
-                      errorText: _dayFieldError(l10n, part.coverageStartController.text),
-                    ),
-                    onChanged: (_) => setState(_apply),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextField(
-                    controller: part.coverageEndController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: l10n.onboardingIncomePartCoverageToLabel,
-                      errorText: _coverageEndError(
-                        l10n,
-                        part.coverageStartController.text,
-                        part.coverageEndController.text,
-                      ),
-                    ),
-                    onChanged: (_) => setState(_apply),
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              l10n.onboardingIncomePartCoverageHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (!byWorkingDays) ...[
-            if (_hasTwoParts && isAdvance) ...[
-              const SizedBox(height: 12),
-              SegmentedButton<_AmountMode>(
-                segments: [
-                  ButtonSegment(
-                    value: _AmountMode.percentage,
-                    label: Text(l10n.paymentPartAmountModePercentage),
-                  ),
-                  ButtonSegment(
-                    value: _AmountMode.fixed,
-                    label: Text(l10n.paymentPartAmountModeFixed),
-                  ),
-                ],
-                selected: {_advanceAmountMode},
-                onSelectionChanged: (selection) {
-                  setState(() {
-                    _advanceAmountMode = selection.first;
-                    _apply();
-                  });
-                },
+          if (_previewAmountFor(index, incomeData) case final previewAmount?)
+            _buildAmountPreview(context, l10n, previewAmount, incomeData)
+          else if (_hasTwoParts && _advanceAmountMode == _AmountMode.byWorkingDays)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                l10n.onboardingIncomePartAmountDependsOnAttendance,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _advanceAmountMode == _AmountMode.percentage
-                    ? _advancePercentageController
-                    : _advanceFixedController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: _advanceAmountMode == _AmountMode.percentage
-                      ? l10n.onboardingIncomePartPercentageLabel
-                      : l10n.onboardingIncomePartFixedAmountLabel,
-                  errorText: _numberFieldError(
-                    l10n,
-                    _advanceAmountMode == _AmountMode.percentage
-                        ? _advancePercentageController.text
-                        : _advanceFixedController.text,
-                  ),
-                ),
-                onChanged: (_) => setState(_apply),
-              ),
-            ],
-            if (_hasTwoParts && !isAdvance) ...[
-              const SizedBox(height: 12),
-              Text(
-                l10n.onboardingIncomeMainPaymentAuto(_mainPaymentPreview(incomeData) ?? '—'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-            if (partAmount != null) _buildAmountPreview(context, l10n, partAmount, incomeData),
-          ] else if (_hasTwoParts) ...[
-            const SizedBox(height: 12),
-            Text(
-              l10n.onboardingIncomePartAmountDependsOnAttendance,
-              style: Theme.of(context).textTheme.bodySmall,
             ),
-          ],
         ],
       ),
     );
+  }
+
+  /// This part's amount, for the currency preview — `null` when it can't
+  /// be known without a full forecast (by-working-days mode).
+  PaymentPartAmount? _previewAmountFor(int index, IncomeStepData incomeData) {
+    if (!_hasTwoParts) return PaymentPartAmount.fixed(amount: incomeData.nominalAmount);
+    if (_advanceAmountMode != _AmountMode.percentage) return null;
+    final advancePercentage = Decimal.tryParse(_advancePercentageController.text);
+    if (advancePercentage == null) return null;
+    return index == 0
+        ? PaymentPartAmount.percentage(percentage: Percentage(advancePercentage))
+        : PaymentPartAmount.percentage(
+            percentage: Percentage(Decimal.fromInt(100) - advancePercentage),
+          );
   }
 
   @override
@@ -530,9 +511,9 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
     final l10n = AppLocalizations.of(context);
     final incomeData = _incomeData;
     final needsPreviewRate =
-        _mode == IncomeCalculationMode.fixed &&
         incomeData != null &&
-        incomeData.nominalAmount.currency != incomeData.payoutCurrency;
+        incomeData.nominalAmount.currency != incomeData.payoutCurrency &&
+        (!_hasTwoParts || _advanceAmountMode == _AmountMode.percentage);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -544,36 +525,7 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 24),
-          SegmentedButton<IncomeCalculationMode>(
-            segments: [
-              ButtonSegment(
-                value: IncomeCalculationMode.fixed,
-                label: Text(l10n.onboardingIncomeCalculationModeFixed),
-              ),
-              ButtonSegment(
-                value: IncomeCalculationMode.byWorkingDays,
-                label: Text(l10n.onboardingIncomeCalculationModeByWorkingDays),
-              ),
-            ],
-            selected: {_mode},
-            onSelectionChanged: (selection) {
-              setState(() {
-                _mode = selection.first;
-                _apply();
-              });
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              _mode == IncomeCalculationMode.fixed
-                  ? l10n.onboardingIncomeCalculationModeFixedHint
-                  : l10n.onboardingIncomeCalculationModeByWorkingDaysHint,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
           if (_hasTwoParts) ...[
-            const SizedBox(height: 24),
             Text(
               l10n.onboardingIncomeRateFixingLabel,
               style: Theme.of(context).textTheme.labelLarge,
@@ -614,9 +566,9 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
                 onChanged: (_) => setState(_apply),
               ),
             ],
+            const SizedBox(height: 24),
           ],
           if (needsPreviewRate) ...[
-            const SizedBox(height: 24),
             TextField(
               controller: _previewRateController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -632,8 +584,8 @@ class _IncomeCalculationStepScreenState extends ConsumerState<IncomeCalculationS
               l10n.onboardingIncomePreviewRateHint,
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 24),
           ],
-          const SizedBox(height: 24),
           if (incomeData != null)
             for (var i = 0; i < _parts.length; i++) _buildPart(context, l10n, i, incomeData),
           Text(l10n.onboardingIncomeDeductionLabel, style: Theme.of(context).textTheme.labelLarge),

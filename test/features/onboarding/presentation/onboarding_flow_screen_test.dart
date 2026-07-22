@@ -134,7 +134,7 @@ void main() {
     // Currency step: default primary currency is committed asynchronously
     // (see CurrencyStepScreen.initState) — settle, then advance since the
     // required step is already complete.
-    expect(find.text('Your main currency'), findsOneWidget);
+    expect(find.text('Which currency should we total everything in?'), findsOneWidget);
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
 

@@ -8,7 +8,6 @@ import 'package:personal_finance_assistant/domain/engines/currency_converter.dar
 import 'package:personal_finance_assistant/domain/engines/salary_calculator.dart';
 import 'package:personal_finance_assistant/domain/entities/deduction_rule.dart';
 import 'package:personal_finance_assistant/domain/entities/exchange_rate.dart';
-import 'package:personal_finance_assistant/domain/entities/income_calculation_mode.dart';
 import 'package:personal_finance_assistant/domain/entities/income_schedule_rule.dart';
 import 'package:personal_finance_assistant/domain/entities/income_source.dart';
 import 'package:personal_finance_assistant/domain/entities/income_type.dart';
@@ -52,7 +51,6 @@ void main() {
   });
 
   IncomeSource buildSource({
-    required IncomeCalculationMode calculationMode,
     required List<IncomeScheduleRule> scheduleRules,
     CurrencyCode? payoutCurrency,
     DeductionRule deductionRule = const DeductionRule.none(),
@@ -62,7 +60,6 @@ void main() {
     type: IncomeType.salary,
     nominalAmount: Money(nominal ?? Decimal.fromInt(5500), usd),
     payoutCurrency: payoutCurrency ?? usd,
-    calculationMode: calculationMode,
     deductionRule: deductionRule,
     startDate: DateTime.utc(2026, 1, 1),
     isActive: true,
@@ -144,7 +141,6 @@ void main() {
   test('fixed salary: full nominal amount regardless of days worked', () async {
     final rule = fixedRule(paymentDay: 30, amount: Decimal.fromInt(5500));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [rule],
     );
 
@@ -168,7 +164,6 @@ void main() {
   test('by working days: a single payment covering the whole month prorates by attendance', () async {
     final rule = byWorkingDaysRule(coverageStartDay: 1, coverageEndDay: 31, paymentDay: 30);
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.byWorkingDays,
       scheduleRules: [rule],
     );
 
@@ -210,7 +205,6 @@ void main() {
         paymentDay: 31,
       );
       final source = buildSource(
-        calculationMode: IncomeCalculationMode.byWorkingDays,
         scheduleRules: [advance, main],
       );
 
@@ -264,7 +258,6 @@ void main() {
         paymentDay: 15,
       );
       final source = buildSource(
-        calculationMode: IncomeCalculationMode.byWorkingDays,
         scheduleRules: [advance],
       );
 
@@ -291,7 +284,6 @@ void main() {
     final advance = percentRule(partIndex: 0, paymentDay: 15, percentage: Decimal.fromInt(50));
     final main = fixedRule(partIndex: 1, paymentDay: 30, amount: Decimal.fromInt(2750));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [advance, main],
     );
 
@@ -333,7 +325,6 @@ void main() {
     );
     final rule = fixedRule(paymentDay: 15, amount: Decimal.fromInt(5500));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [rule],
       payoutCurrency: uah,
     );
@@ -393,7 +384,6 @@ void main() {
         rateFixingDay: 1,
       );
       final source = buildSource(
-        calculationMode: IncomeCalculationMode.fixed,
         scheduleRules: [advance, main],
         payoutCurrency: uah,
       );
@@ -427,7 +417,6 @@ void main() {
   test('percentage deduction reduces the part amount directly', () async {
     final rule = fixedRule(paymentDay: 30, amount: Decimal.fromInt(5500));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [rule],
       deductionRule: DeductionRule.percentage(percentage: Percentage(Decimal.fromInt(18))),
     );
@@ -450,7 +439,6 @@ void main() {
     final advance = percentRule(partIndex: 0, paymentDay: 15, percentage: Decimal.fromInt(50));
     final main = percentRule(partIndex: 1, paymentDay: 30, percentage: Decimal.fromInt(50));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [advance, main],
       deductionRule: DeductionRule.fixedAmount(amount: Money(Decimal.fromInt(200), usd)),
     );
@@ -501,7 +489,7 @@ void main() {
       amount: Decimal.fromInt(100),
       weekendShiftRule: WeekendShiftRule.moveToNextBusinessDay,
     );
-    final source = buildSource(calculationMode: IncomeCalculationMode.fixed, scheduleRules: []);
+    final source = buildSource(scheduleRules: []);
 
     Future<DateTime> expectedDateFor(IncomeScheduleRule rule) async => forecastOf(
       await calculator.forecast(
@@ -522,7 +510,7 @@ void main() {
 
   test('a payment day beyond the month length clamps to the last day', () async {
     final rule = fixedRule(paymentDay: 31, amount: Decimal.fromInt(100));
-    final source = buildSource(calculationMode: IncomeCalculationMode.fixed, scheduleRules: [rule]);
+    final source = buildSource(scheduleRules: [rule]);
 
     final forecast = forecastOf(
       await calculator.forecast(
@@ -540,7 +528,6 @@ void main() {
   test('no rate available: flagged as rate-missing, not a crash', () async {
     final rule = fixedRule(paymentDay: 30, amount: Decimal.fromInt(5500));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [rule],
       payoutCurrency: uah,
     );
@@ -572,7 +559,6 @@ void main() {
     );
     final rule = fixedRule(paymentDay: 15, amount: Decimal.fromInt(100));
     final source = buildSource(
-      calculationMode: IncomeCalculationMode.fixed,
       scheduleRules: [rule],
       payoutCurrency: uah,
     );
@@ -628,7 +614,6 @@ void main() {
         rateFixingDay: 1,
       );
       final source = buildSource(
-        calculationMode: IncomeCalculationMode.fixed,
         scheduleRules: [advance, main],
         payoutCurrency: uah,
       );

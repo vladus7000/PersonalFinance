@@ -8,9 +8,17 @@ import '../application/currency_step_data.dart';
 import '../application/onboarding_controller.dart';
 import '../application/onboarding_step_ids.dart';
 
-/// Onboarding step 1 (§3.3 doc.md): primary + additional currencies.
-/// Selection is held in [OnboardingState.stepData] until onboarding
-/// completes (E2.T4 persists it into [UserProfile]).
+/// Onboarding step 1 (§3.3 doc.md): the currency all capital/summary
+/// figures are totaled in (doc.md §8.17) — each account/income still keeps
+/// its own real currency, this is only the aggregation currency for the
+/// Dashboard. Selection is held in [OnboardingState.stepData] until
+/// onboarding completes (E2.T4 persists it into [UserProfile]).
+///
+/// No "additional currencies" question here (removed 2026-07-22, see
+/// doc.md §8.20): `UserProfile.additionalCurrencies` isn't read by any
+/// feature yet, so asking for it during onboarding was just friction with
+/// no payoff — the field stays in the schema (always empty from onboarding)
+/// for whenever a concrete use appears.
 ///
 /// A default primary currency is committed to state as soon as the step is
 /// shown (see [initState]) — otherwise a user who agrees with the default
@@ -32,16 +40,16 @@ class _CurrencyStepScreenState extends ConsumerState<CurrencyStepScreen> {
     if (existing == null) {
       // Riverpod forbids modifying provider state synchronously during
       // build/initState — defer to right after the first frame.
-      Future(() => _update(primary: commonCurrencyCodes.first, additional: const []));
+      Future(() => _update(commonCurrencyCodes.first));
     }
   }
 
-  void _update({required CurrencyCode primary, required List<CurrencyCode> additional}) {
+  void _update(CurrencyCode primary) {
     ref
         .read(onboardingControllerProvider.notifier)
         .setStepData(
           OnboardingStepIds.currency,
-          CurrencyStepData(primary: primary, additional: additional),
+          CurrencyStepData(primary: primary, additional: const []),
           completed: true,
         );
   }
@@ -58,7 +66,6 @@ class _CurrencyStepScreenState extends ConsumerState<CurrencyStepScreen> {
             as CurrencyStepData?;
 
     final primary = stepData?.primary ?? commonCurrencyCodes.first;
-    final additional = stepData?.additional ?? const <CurrencyCode>[];
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -66,6 +73,8 @@ class _CurrencyStepScreenState extends ConsumerState<CurrencyStepScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l10n.onboardingCurrencyTitle, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(l10n.onboardingCurrencyHint, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 24),
           Text(l10n.onboardingPrimaryCurrencyLabel, style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 8),
@@ -78,31 +87,8 @@ class _CurrencyStepScreenState extends ConsumerState<CurrencyStepScreen> {
             ],
             onChanged: (value) {
               if (value == null) return;
-              _update(primary: value, additional: additional.where((c) => c != value).toList());
+              _update(value);
             },
-          ),
-          const SizedBox(height: 24),
-          Text(
-            l10n.onboardingAdditionalCurrenciesLabel,
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final currency in commonCurrencyCodes.where((c) => c != primary))
-                FilterChip(
-                  label: Text(currency.value),
-                  selected: additional.contains(currency),
-                  onSelected: (selected) {
-                    final next = selected
-                        ? [...additional, currency]
-                        : additional.where((c) => c != currency).toList();
-                    _update(primary: primary, additional: next);
-                  },
-                ),
-            ],
           ),
         ],
       ),

@@ -3,7 +3,6 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../core/money/currency_code.dart';
 import '../../core/money/money.dart';
 import 'deduction_rule.dart';
-import 'income_calculation_mode.dart';
 import 'income_schedule_rule.dart';
 import 'income_type.dart';
 
@@ -25,6 +24,12 @@ part 'income_source.freezed.dart';
 /// already `scheduleRules.length`); `exchangeRateRuleId` (superseded by
 /// [ExchangeRateSource], compat principle #2); `notificationOffset`
 /// (deferred to E10, no notification system exists yet).
+///
+/// No `calculationMode` (removed 2026-07-22, see doc.md §8.20): whether a
+/// part is a percentage/fixed split of the nominal amount or computed from
+/// attendance is fully determined per-rule by
+/// [IncomeScheduleRule.amount] being non-null/`null` — a source-wide flag
+/// would have been redundant with that, and confusing in the UI.
 @freezed
 sealed class IncomeSource with _$IncomeSource {
   const factory IncomeSource({
@@ -33,7 +38,6 @@ sealed class IncomeSource with _$IncomeSource {
     required IncomeType type,
     required Money nominalAmount,
     required CurrencyCode payoutCurrency,
-    required IncomeCalculationMode calculationMode,
     required DeductionRule deductionRule,
 
     /// Unused until the Accounts epic lands — pre-added like

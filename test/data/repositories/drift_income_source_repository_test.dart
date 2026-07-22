@@ -7,7 +7,6 @@ import 'package:personal_finance_assistant/core/money/percentage.dart';
 import 'package:personal_finance_assistant/data/db/app_database.dart';
 import 'package:personal_finance_assistant/data/repositories/drift_income_source_repository.dart';
 import 'package:personal_finance_assistant/domain/entities/deduction_rule.dart';
-import 'package:personal_finance_assistant/domain/entities/income_calculation_mode.dart';
 import 'package:personal_finance_assistant/domain/entities/income_schedule_rule.dart';
 import 'package:personal_finance_assistant/domain/entities/income_source.dart';
 import 'package:personal_finance_assistant/domain/entities/income_type.dart';
@@ -35,7 +34,6 @@ void main() {
     type: IncomeType.salary,
     nominalAmount: Money(Decimal.fromInt(5500), usd),
     payoutCurrency: uah,
-    calculationMode: IncomeCalculationMode.fixed,
     deductionRule: const DeductionRule.none(),
     startDate: DateTime.utc(2026, 1, 1),
     isActive: true,

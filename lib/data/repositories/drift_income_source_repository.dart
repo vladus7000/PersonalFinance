@@ -5,7 +5,6 @@ import '../../core/money/currency_code.dart';
 import '../../core/money/money.dart';
 import '../../core/money/percentage.dart';
 import '../../domain/entities/deduction_rule.dart';
-import '../../domain/entities/income_calculation_mode.dart';
 import '../../domain/entities/income_schedule_rule.dart';
 import '../../domain/entities/income_source.dart';
 import '../../domain/entities/income_type.dart';
@@ -93,7 +92,6 @@ class DriftIncomeSourceRepository implements IncomeSourceRepository {
       type: IncomeType.values.byName(row.type),
       nominalAmount: Money(Decimal.parse(row.nominalAmount), CurrencyCode(row.contractCurrency)),
       payoutCurrency: CurrencyCode(row.payoutCurrency),
-      calculationMode: IncomeCalculationMode.values.byName(row.calculationMode),
       deductionRule: _deductionRuleFrom(row),
       targetAccountId: row.targetAccountId,
       // Drift does not preserve DateTime.isUtc through storage — see
@@ -151,7 +149,6 @@ class DriftIncomeSourceRepository implements IncomeSourceRepository {
       nominalAmount: source.nominalAmount.amount.toString(),
       contractCurrency: source.nominalAmount.currency.value,
       payoutCurrency: source.payoutCurrency.value,
-      calculationMode: source.calculationMode.name,
       deductionType: Value(switch (deduction) {
         NoDeduction() => 'none',
         FixedDeduction() => 'fixedAmount',

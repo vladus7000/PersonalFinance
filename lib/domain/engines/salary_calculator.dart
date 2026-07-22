@@ -2,7 +2,6 @@ import 'package:decimal/decimal.dart';
 
 import '../../core/money/money.dart';
 import '../entities/deduction_rule.dart';
-import '../entities/income_calculation_mode.dart';
 import '../entities/income_schedule_rule.dart';
 import '../entities/income_source.dart';
 import '../entities/payment_part_amount.dart';
@@ -22,15 +21,15 @@ import 'currency_converter.dart';
 /// Calculation pipeline for a single part (documented since doc.md does not
 /// specify composition order):
 /// 1. Gross amount — two entirely different "mechanics" depending on
-///    [IncomeSource.calculationMode] (doc.md §8.18): with `fixed`, a
-///    `percentage`/`fixed` [IncomeScheduleRule.amount] splits the nominal
-///    amount between parts, independent of attendance. With
-///    `byWorkingDays`, `amount` is not used at all — the gross is a daily
-///    rate (`nominalAmount / workingDaysInMonth`) times the days actually
-///    worked within *this part's own* [IncomeScheduleRule.coverageStartDay]
-///    -`coverageEndDay` range (e.g. an advance covering the 1st-15th only
+///    whether [IncomeScheduleRule.amount] is set (doc.md §8.18/§8.20): if
+///    it is, a `percentage`/`fixed` split of the nominal amount applies,
+///    independent of attendance. If it's `null`, the gross is a daily rate
+///    (`nominalAmount / workingDaysInMonth`) times the days actually worked
+///    within *this part's own* [IncomeScheduleRule.coverageStartDay]-
+///    `coverageEndDay` range (e.g. an advance covering the 1st-15th only
 ///    pays for attendance in the 1st-15th, not a fixed slice of the whole
-///    month's proration).
+///    month's proration) — always assuming full attendance in MVP, since
+///    onboarding never asks the user to enter actual attendance.
 /// 2. [IncomeSource.deductionRule] is applied to this part: a `percentage`
 ///    deduction applies directly to this part's gross amount; a
 ///    `fixedAmount` deduction is split across all of the source's active
@@ -66,7 +65,7 @@ class SalaryCalculator {
     required String countryCode,
 
     /// Days actually worked within [rule]'s own coverage range — only
-    /// meaningful when `calculationMode == byWorkingDays`. `null` assumes
+    /// meaningful when [IncomeScheduleRule.amount] is `null`. `null` assumes
     /// full attendance (every working day in the range was worked).
     int? actualWorkedDaysInCoverage,
     Set<int> manualHolidayDays = const {},
@@ -158,7 +157,8 @@ class SalaryCalculator {
   }
 
   /// This part's gross contract-currency amount — see class doc point 1 for
-  /// why `fixed` and `byWorkingDays` compute this completely differently.
+  /// why a set [IncomeScheduleRule.amount] and a `null` one compute this
+  /// completely differently.
   Future<Money> _grossForRule({
     required IncomeScheduleRule rule,
     required IncomeSource source,
@@ -169,13 +169,8 @@ class SalaryCalculator {
     required int month,
     required Set<int> manualHolidayDays,
   }) async {
-    if (source.calculationMode == IncomeCalculationMode.fixed) {
-      final amount = rule.amount;
-      if (amount == null) {
-        throw ArgumentError(
-          'IncomeScheduleRule.amount is required when calculationMode is fixed',
-        );
-      }
+    final amount = rule.amount;
+    if (amount != null) {
       return switch (amount) {
         FixedPaymentPart(:final amount) => amount,
         PercentagePaymentPart(:final percentage) => percentage.of(source.nominalAmount),

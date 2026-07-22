@@ -55,23 +55,17 @@ void main() {
     await tester.tap(find.text('EUR').last);
     await tester.pumpAndSettle();
 
-    // Select an additional currency.
-    await tester.tap(find.widgetWithText(FilterChip, 'UAH'));
-    await tester.pump();
-
     // Advance to the next step (income — currency is complete, the
     // required step, so Next is enabled).
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
     expect(find.byType(IncomeStepScreen), findsOneWidget);
 
-    // Go back and confirm the selections were retained, not reset.
+    // Go back and confirm the selection was retained, not reset.
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
 
     expect(find.text('EUR'), findsWidgets); // shown as the selected dropdown value
-    final uahChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, 'UAH'));
-    expect(uahChip.selected, isTrue);
   });
 
   testWidgets('life expenses: switching to percent mode and typing keeps the value on revisit', (

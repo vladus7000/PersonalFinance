@@ -1,14 +1,13 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../domain/entities/deduction_rule.dart';
-import '../../../domain/entities/income_calculation_mode.dart';
 import '../../../domain/entities/payment_part_amount.dart';
 import '../../../domain/entities/weekend_shift_rule.dart';
 
 part 'income_calculation_step_data.freezed.dart';
 
-/// Onboarding step 3 (doc.md §3.3): how [IncomeStepData]'s nominal amount
-/// turns into actual scheduled payments. [parts] has one entry per
+/// Onboarding step 3 (doc.md §3.3, §8.20): how [IncomeStepData]'s nominal
+/// amount turns into actual scheduled payments. [parts] has one entry per
 /// [IncomeStepData.payoutsPerMonth].
 ///
 /// [rateFixingDay] is asked once, here, and applied to every part — real
@@ -18,7 +17,6 @@ part 'income_calculation_step_data.freezed.dart';
 @freezed
 sealed class IncomeCalculationStepData with _$IncomeCalculationStepData {
   const factory IncomeCalculationStepData({
-    required IncomeCalculationMode calculationMode,
     required List<IncomePartInput> parts,
     required DeductionRule deductionRule,
 
@@ -39,13 +37,16 @@ sealed class IncomePartInput with _$IncomePartInput {
     required int coverageEndDay,
     required int paymentDay,
 
-    /// See [IncomeScheduleRule.paymentMonthOffset] — 0 (same month as the
-    /// period) unless the user says otherwise.
+    /// See [IncomeScheduleRule.paymentMonthOffset] — not asked in the UI
+    /// (doc.md §8.20): the first part defaults to 0 (this month), any
+    /// further part to 1 (next month) — set programmatically, not by the
+    /// user, to keep the screen simple.
     @Default(0) int paymentMonthOffset,
     required WeekendShiftRule weekendShiftRule,
 
-    /// See [IncomeScheduleRule.amount] — only asked/used when
-    /// `calculationMode == fixed`.
+    /// See [IncomeScheduleRule.amount] — `null` means this part's amount is
+    /// computed automatically from attendance in [coverageStartDay]-
+    /// [coverageEndDay] instead.
     PaymentPartAmount? amount,
   }) = _IncomePartInput;
 }

@@ -64,8 +64,9 @@ void main() {
 
     expect(find.text('Advance'), findsOneWidget);
     expect(find.text('Main payment'), findsOneWidget);
-    // 2 payment-day fields + 1 advance amount field — no amount field for
-    // the main payment, since it is computed automatically.
+    // 2 payment-day fields + 1 advance percentage field (percentage is the
+    // default amount mode) — no amount field for the main payment, since
+    // it is computed automatically.
     expect(find.byType(TextField), findsNWidgets(3));
   });
 
@@ -74,7 +75,7 @@ void main() {
   ) async {
     await setUpTwoPartIncome(tester);
 
-    // Field order: advance day, advance amount, main day (main has no
+    // Field order: advance day, advance percentage, main day (main has no
     // amount field — see IncomeCalculationStepScreen doc).
     final fields = find.byType(TextField);
     await tester.enterText(fields.at(0), '15'); // advance day
@@ -103,59 +104,65 @@ void main() {
     );
     // The auto-computed value is shown, not just stored silently.
     expect(find.textContaining('60%'), findsOneWidget);
+    // Neither part asks which month it's paid in — set automatically.
+    expect(data.parts[0].paymentMonthOffset, 0);
+    expect(data.parts[1].paymentMonthOffset, 1);
   });
 
-  testWidgets('fixed advance: the main payment is the rest of the nominal amount', (
+  testWidgets(
+    'by working days advance: the coverage range determines the amount, main gets the rest',
+    (tester) async {
+      await setUpTwoPartIncome(tester);
+
+      final byWorkingDays = find.text('By working days');
+      await tester.ensureVisible(byWorkingDays);
+      await tester.tap(byWorkingDays);
+      await tester.pumpAndSettle();
+
+      // Field order: advance day, advance coverage-from, advance
+      // coverage-to, main day — main has no fields of its own at all.
+      final fields = find.byType(TextField);
+      expect(fields, findsNWidgets(4));
+      await tester.enterText(fields.at(0), '15'); // advance day
+      await tester.enterText(fields.at(1), '1'); // advance coverage from
+      await tester.enterText(fields.at(2), '15'); // advance coverage to
+      await tester.enterText(fields.at(3), '30'); // main day
+      await tester.pump();
+
+      final data = readStepData(tester);
+      expect(data, isNotNull);
+      expect(data!.parts[0].amount, isNull);
+      expect(data.parts[0].coverageStartDay, 1);
+      expect(data.parts[0].coverageEndDay, 15);
+      expect(data.parts[1].amount, isNull);
+      // Main automatically covers the rest of the month.
+      expect(data.parts[1].coverageStartDay, 16);
+      expect(data.parts[1].coverageEndDay, 31);
+
+      expect(find.textContaining('16'), findsWidgets); // shown in the auto preview
+      expect(find.textContaining('Calculated automatically'), findsWidgets);
+    },
+  );
+
+  testWidgets('the advance defaults to this month and the main payment to next month, silently', (
     tester,
   ) async {
     await setUpTwoPartIncome(tester);
 
-    await tester.ensureVisible(find.text('A fixed amount'));
-    await tester.tap(find.text('A fixed amount'));
-    await tester.pumpAndSettle();
+    // No control on screen lets the user change this — see doc.md §8.20.
+    expect(find.text('This month'), findsNothing);
+    expect(find.text('Next month'), findsNothing);
 
     final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), '15'); // advance day
-    await tester.enterText(fields.at(1), '400'); // advance = 400 of 1000
-    await tester.enterText(fields.at(2), '30'); // main day
+    await tester.enterText(fields.at(0), '22');
+    await tester.enterText(fields.at(1), '50');
+    await tester.enterText(fields.at(2), '7');
     await tester.pump();
 
     final data = readStepData(tester);
     expect(data, isNotNull);
-    expect(
-      data!.parts[0].amount,
-      isA<FixedPaymentPart>().having((p) => p.amount, 'amount', Money(Decimal.fromInt(400), usd)),
-    );
-    expect(
-      data.parts[1].amount,
-      isA<FixedPaymentPart>().having(
-        (p) => p.amount,
-        'amount',
-        Money(Decimal.fromInt(600), usd), // 1000 - 400
-      ),
-    );
-  });
-
-  testWidgets('the main payment can be scheduled for the following month', (tester) async {
-    await setUpTwoPartIncome(tester);
-
-    final fields = find.byType(TextField);
-    await tester.enterText(fields.at(0), '22'); // advance day
-    await tester.enterText(fields.at(1), '50'); // advance = 50%
-    await tester.enterText(fields.at(2), '7'); // main day
-    await tester.pump();
-
-    // Two "Next month" segments exist (one per part) — the second belongs
-    // to the main payment.
-    final nextMonthForMain = find.text('Next month').last;
-    await tester.ensureVisible(nextMonthForMain);
-    await tester.tap(nextMonthForMain);
-    await tester.pump();
-
-    final data = readStepData(tester);
-    expect(data, isNotNull);
-    expect(data!.parts[0].paymentMonthOffset, 0); // advance stays "this month"
-    expect(data.parts[1].paymentMonthOffset, 1); // main moves to "next month"
+    expect(data!.parts[0].paymentMonthOffset, 0);
+    expect(data.parts[1].paymentMonthOffset, 1);
   });
 
   testWidgets('a specific rate-fixing day applies to the whole source, not per part', (
@@ -185,41 +192,6 @@ void main() {
     // by every part — not one-per-part.
     expect(data!.rateFixingDay, 1);
   });
-
-  testWidgets(
-    "by working days, two parts: asks for each part's coverage range instead of an amount",
-    (tester) async {
-      await setUpTwoPartIncome(tester);
-
-      final byWorkingDaysOption = find.text('Prorated by working days');
-      await tester.ensureVisible(byWorkingDaysOption);
-      await tester.tap(byWorkingDaysOption);
-      await tester.pumpAndSettle();
-
-      // Per part: day, coverage-from, coverage-to — no amount field at all.
-      final fields = find.byType(TextField);
-      expect(fields, findsNWidgets(6));
-
-      await tester.enterText(fields.at(0), '15'); // advance day
-      await tester.enterText(fields.at(1), '1'); // advance coverage from
-      await tester.enterText(fields.at(2), '15'); // advance coverage to
-      await tester.enterText(fields.at(3), '30'); // main day
-      await tester.enterText(fields.at(4), '16'); // main coverage from
-      await tester.enterText(fields.at(5), '30'); // main coverage to
-      await tester.pump();
-
-      final data = readStepData(tester);
-      expect(data, isNotNull);
-      expect(data!.parts[0].amount, isNull);
-      expect(data.parts[0].coverageStartDay, 1);
-      expect(data.parts[0].coverageEndDay, 15);
-      expect(data.parts[1].amount, isNull);
-      expect(data.parts[1].coverageStartDay, 16);
-      expect(data.parts[1].coverageEndDay, 30);
-
-      expect(find.textContaining('depends on days actually worked'), findsWidgets);
-    },
-  );
 
   testWidgets(
     'shows a rough conversion preview when payout currency differs from contract currency',
@@ -260,4 +232,44 @@ void main() {
       expect(find.textContaining('40000'), findsOneWidget); // 1000 USD * 40
     },
   );
+
+  testWidgets('single payment: no amount question at all, the full nominal amount is implied', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      buildFlow(),
+      overrides: [
+        onboardingStepsProvider.overrideWith(
+          (ref) => const [
+            OnboardingStepDefinition(id: 'income', isRequired: true),
+            OnboardingStepDefinition(id: 'income_calculation', isRequired: true),
+          ],
+        ),
+      ],
+    );
+
+    await tester.enterText(find.byType(TextField).at(0), 'Main job');
+    await tester.enterText(find.byType(TextField).at(1), '2000');
+    await tester.pump();
+    // Payments per month defaults to "Once" — leave as-is.
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget); // just the payment day
+    await tester.enterText(find.byType(TextField), '10');
+    await tester.pump();
+
+    final data = readStepData(tester);
+    expect(data, isNotNull);
+    expect(data!.parts, hasLength(1));
+    expect(
+      data.parts.single.amount,
+      isA<FixedPaymentPart>().having(
+        (p) => p.amount,
+        'amount',
+        Money(Decimal.fromInt(2000), usd),
+      ),
+    );
+  });
 }

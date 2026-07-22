@@ -53,7 +53,6 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
               type: incomeData.type,
               nominalAmount: incomeData.nominalAmount,
               payoutCurrency: incomeData.payoutCurrency,
-              calculationMode: incomeCalculation.calculationMode,
               deductionRule: incomeCalculation.deductionRule,
               startDate: now,
               isActive: true,

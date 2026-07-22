@@ -46,9 +46,12 @@
   "@onboardingFinish": {
     "description": "Button on the last onboarding step that completes onboarding"
   },
-  "onboardingCurrencyTitle": "Your main currency",
-  "onboardingPrimaryCurrencyLabel": "Primary currency",
-  "onboardingAdditionalCurrenciesLabel": "Additional currencies (optional)",
+  "onboardingCurrencyTitle": "Which currency should we total everything in?",
+  "@onboardingCurrencyTitle": {
+    "description": "Onboarding step 1 title — the aggregation/display currency, not a spending currency (doc.md §8.17)"
+  },
+  "onboardingCurrencyHint": "Every account and income keeps its own real currency — nothing is lost. This one is only used to combine them into a single capital figure on the Dashboard.",
+  "onboardingPrimaryCurrencyLabel": "Currency for totals",
   "onboardingLifeExpensesTitle": "Monthly living expenses",
   "@onboardingLifeExpensesTitle": {
     "description": "Onboarding step 4 title — an aggregate estimate, not per-transaction tracking (doc.md §2.8)"
@@ -103,10 +106,6 @@
   "@onboardingIncomeCalculationTitle": {
     "description": "Onboarding step 3 title (doc.md §3.3 step 3)"
   },
-  "onboardingIncomeCalculationModeFixed": "Fixed regardless of days worked",
-  "onboardingIncomeCalculationModeByWorkingDays": "Prorated by working days",
-  "onboardingIncomeCalculationModeFixedHint": "You get the full amount every month, even if you were on vacation or sick leave.",
-  "onboardingIncomeCalculationModeByWorkingDaysHint": "If you work fewer days than the period has (vacation, sick leave, a partial month), the amount is scaled down proportionally.",
   "onboardingIncomePartAdvanceTitle": "Advance",
   "onboardingIncomePartMainTitle": "Main payment",
   "onboardingIncomePartPaymentDayLabel": "Day of month",
@@ -115,15 +114,10 @@
   "weekendShiftRuleNone": "Keep the date",
   "weekendShiftRuleMoveToPreviousBusinessDay": "Move earlier",
   "weekendShiftRuleMoveToNextBusinessDay": "Move later",
-  "onboardingIncomePartMonthLabel": "Which month it's paid in",
-  "paymentMonthOffsetSameMonth": "This month",
-  "paymentMonthOffsetNextMonth": "Next month",
-  "onboardingIncomePartMonthHint": "Some payroll schemes pay a period's salary early in the following month (e.g. June's salary paid on July 7th).",
-  "onboardingIncomePartAmountModeLabel": "This payment is",
+  "onboardingIncomePartAmountModeLabel": "The advance is",
   "paymentPartAmountModePercentage": "% of the amount",
-  "paymentPartAmountModeFixed": "A fixed amount",
+  "paymentPartAmountModeByWorkingDays": "By working days",
   "onboardingIncomePartPercentageLabel": "Percentage",
-  "onboardingIncomePartFixedAmountLabel": "Amount",
   "onboardingIncomeMainPaymentAuto": "Main payment: {value} (the rest, calculated automatically)",
   "@onboardingIncomeMainPaymentAuto": {
     "description": "Read-only preview of the main payment's auto-computed amount (whatever's left after the advance)",
@@ -131,11 +125,20 @@
       "value": {"type": "String"}
     }
   },
+  "onboardingIncomeMainPaymentAutoCoverage": "Main payment: for the {from}-{to}, calculated automatically",
+  "@onboardingIncomeMainPaymentAutoCoverage": {
+    "description": "Read-only preview of the main payment's auto-computed coverage range, mirroring the advance's by-working-days choice",
+    "placeholders": {
+      "from": {"type": "int"},
+      "to": {"type": "int"}
+    }
+  },
   "onboardingIncomePartCoverageLabel": "Paid for days",
   "onboardingIncomePartCoverageFromLabel": "From day",
   "onboardingIncomePartCoverageToLabel": "To day",
-  "onboardingIncomePartCoverageHint": "The days this specific payment covers — e.g. the advance covers the 1st-15th, the main payment covers the 16th-30th. The amount is worked out from attendance in exactly this range.",
-  "onboardingIncomePartAmountDependsOnAttendance": "The exact amount depends on days actually worked in this range — you confirm it when the payment arrives.",
+  "onboardingIncomePartCoverageHint": "The days the advance covers, e.g. the 1st-15th — the main payment automatically covers the rest of the month.",
+  "onboardingIncomePartCoverageEndTooLate": "Must leave at least one day for the main payment",
+  "onboardingIncomePartAmountDependsOnAttendance": "Calculated automatically: a daily rate times the working days in this range (no need to enter attendance — a full month is assumed).",
   "onboardingIncomeRateFixingLabel": "When the exchange rate is fixed",
   "onboardingIncomeRateFixingHint": "If both payments belong to the same month's salary, payroll usually fixes one rate for the whole month (e.g. the 1st) instead of a separate rate per payment.",
   "rateFixingModeOnPaymentDate": "On each payment's own date",

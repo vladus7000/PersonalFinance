@@ -19,9 +19,6 @@ class IncomeSources extends Table {
 
   TextColumn get payoutCurrency => text().named('payout_currency')();
 
-  /// [IncomeCalculationMode] enum name.
-  TextColumn get calculationMode => text().named('calculation_mode')();
-
   /// `'none' | 'fixedAmount' | 'percentage'` — [DeductionRule] discriminator.
   TextColumn get deductionType =>
       text().named('deduction_type').withDefault(const Constant('none'))();
